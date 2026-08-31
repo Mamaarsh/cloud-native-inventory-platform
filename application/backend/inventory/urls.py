@@ -5,6 +5,8 @@ from .views import (
     OrderViewSet,
     ProductViewSet,
     WarehouseViewSet,
+    health_live,
+    health_ready,
 )
 
 router = DefaultRouter()
@@ -31,5 +33,7 @@ router.register(
 )
 
 urlpatterns = [
+    path("health/live/", health_live, name="health-live"),
+    path("health/ready/", health_ready, name="health-ready"),
     path("", include(router.urls)),
 ]
