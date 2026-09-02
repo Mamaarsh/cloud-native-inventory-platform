@@ -8,7 +8,7 @@ This project demonstrates backend engineering practices and DevOps workflows inc
 
 ## 🚀 Features
 
-## Backend
+### Backend
 
 - Django REST Framework API
 - PostgreSQL Database
@@ -18,7 +18,7 @@ This project demonstrates backend engineering practices and DevOps workflows inc
 - Swagger / OpenAPI Documentation
 
 
-## Business Features
+### Business Features
 
 - Product Management
 - Warehouse Management
@@ -28,9 +28,7 @@ This project demonstrates backend engineering practices and DevOps workflows inc
 - Order Status Workflow
 
 
-## Authorization Roles
-
-Implemented roles:
+### Authorization Roles
 
 - Admin
 - Warehouse Manager
@@ -40,65 +38,45 @@ Implemented roles:
 
 ---
 
-# 🏗️ Architecture
+## 🛠️ Tech Stack
 
-The system follows a layered architecture:
+- Python
+- Django
+- Django REST Framework
+- PostgreSQL
+- JWT
+- Docker
+- Git
+- Kubernetes (planned)
+- CI/CD (planned)
+- Prometheus & Grafana (planned)
 
-Client
 
-↓
+---
 
-Django REST API
+## 🏗️ Architecture
 
-↓
+The application follows a layered architecture:
 
-JWT Authentication + RBAC
-
-↓
-
-Business Logic Layer
-
-↓
-
-PostgreSQL Database
+Client → Django REST API → Authentication & RBAC → Business Logic Layer → PostgreSQL
 
 
 Main components:
 
-- API Layer:
-  Handles HTTP requests, validation, serialization, authentication, and permissions.
-
-- Business Logic Layer:
-  Contains application rules such as order workflow and transaction management.
-
-- Data Layer:
-  Uses Django ORM with PostgreSQL for persistent storage.
+- API Layer: Handles requests, validation, serialization, authentication, and permissions.
+- Business Logic Layer: Contains application rules such as order workflow and transaction management.
+- Data Layer: Uses Django ORM with PostgreSQL.
 
 
 Detailed documentation:
 
-- Architecture: docs/architecture.md
-- API Reference: docs/api.md
+- docs/architecture.md
+- docs/api.md
 
 
 ---
 
-# 🛠️ Tech Stack
-
-| Category | Technology |
-|---|---|
-| Backend | Python, Django, Django REST Framework |
-| Database | PostgreSQL |
-| Authentication | JWT |
-| Authorization | RBAC |
-| Containerization | Docker |
-| API Documentation | Swagger / OpenAPI |
-| Future Infrastructure | Kubernetes, CI/CD, Monitoring |
-
-
----
-
-# 📚 API Documentation
+## 📚 API Documentation
 
 Swagger UI:
 
@@ -110,23 +88,13 @@ OpenAPI Schema:
 /api/schema/
 
 
-Full API documentation:
-
-docs/api.md
-
-
 ---
 
-# ▶️ Running Locally
+## ▶️ Run Locally
 
 Clone repository:
 
 git clone https://github.com/Mamaarsh/cloud-native-inventory-platform.git
-
-
-Navigate to backend:
-
-cd application/backend
 
 
 Install dependencies:
@@ -134,12 +102,7 @@ Install dependencies:
 pip install -r requirements.txt
 
 
-Create environment file:
-
-cp .env.example .env
-
-
-Run migrations:
+Apply migrations:
 
 python manage.py migrate
 
@@ -156,16 +119,15 @@ python manage.py runserver
 
 ---
 
-# 🧪 Testing
+## 🧪 Testing
 
-The project includes tests for:
+Implemented tests cover:
 
 - JWT Authentication
 - RBAC Permissions
 - Order Creation
 - Order Status Workflow
 - Health Checks
-- API Validation
 
 
 Run tests:
@@ -175,60 +137,45 @@ python manage.py test
 
 ---
 
-# 🗺️ Roadmap
+## 🗺️ Roadmap
 
-## Application
+Application:
 
 ✅ Backend Foundation  
-✅ PostgreSQL Integration  
 ✅ JWT Authentication  
 ✅ RBAC Authorization  
 ✅ Inventory Management  
 ✅ Order Management  
 ✅ Order Workflow  
 
-
 Upcoming:
 
 ⬜ Stock Management  
 ⬜ Payment Module  
 ⬜ Notification Service  
-⬜ Performance Optimization  
 
 
----
-
-## DevOps
-
-Upcoming:
+DevOps:
 
 ⬜ Production Docker Compose  
 ⬜ CI/CD Pipeline  
-⬜ Docker Image Registry  
 ⬜ Kubernetes Deployment  
 ⬜ Helm Charts  
 ⬜ Prometheus Monitoring  
 ⬜ Grafana Dashboards  
-⬜ Centralized Logging  
-⬜ Disaster Recovery Strategy  
+⬜ Centralized Logging
 
 
 ---
 
-# 📖 Documentation
+## 📖 Documentation
 
-Architecture:
-
-docs/architecture.md
-
-
-API Reference:
-
-docs/api.md
+- Architecture: docs/architecture.md
+- API Reference: docs/api.md
 
 
 ---
 
-# License
+## License
 
 MIT License
