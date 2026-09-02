@@ -1,6 +1,9 @@
 # Cloud Native Inventory Platform
 
-A production-oriented inventory and order management platform built with Django REST Framework, PostgreSQL, Docker, and cloud-native principles.
+A DevOps-focused cloud-native inventory and order management platform built with Django REST Framework, PostgreSQL, Docker, and modern infrastructure practices.
+
+The main goal of this project is to demonstrate a complete DevOps workflow, including application development, containerization, CI/CD automation, Kubernetes deployment, monitoring, logging, and production-ready infrastructure design.
+
 
 ## Features
 
@@ -13,19 +16,28 @@ A production-oriented inventory and order management platform built with Django 
 - Order Status Workflow
 - Swagger / OpenAPI Documentation
 - PostgreSQL Integration
+- Health Check Endpoints
 
 
 ## Technologies
+
+### Application
 
 - Python
 - Django
 - Django REST Framework
 - PostgreSQL
-- Docker
 - JWT
+
+
+### DevOps & Cloud Native
+
+- Docker
+- CI/CD Pipeline (planned)
 - Kubernetes (planned)
-- CI/CD (planned)
+- Helm Charts (planned)
 - Prometheus & Grafana (planned)
+- Centralized Logging (planned)
 
 
 ## Architecture
@@ -45,17 +57,21 @@ Clone the repository:
 
 git clone https://github.com/Mamaarsh/cloud-native-inventory-platform.git
 
+
 Install dependencies:
 
 pip install -r requirements.txt
+
 
 Run migrations:
 
 python manage.py migrate
 
+
 Create roles:
 
 python manage.py create_roles
+
 
 Run application:
 
@@ -64,6 +80,15 @@ python manage.py runserver
 
 ## Testing
 
+The project includes tests for:
+
+- Authentication
+- RBAC Permissions
+- Order Creation
+- Order Workflow
+- Health Checks
+
+
 Run tests:
 
 python manage.py test
@@ -71,11 +96,16 @@ python manage.py test
 
 ## Roadmap
 
+### DevOps Roadmap
+
 - Production Docker Compose
-- CI/CD Pipeline
+- CI/CD Automation
+- Docker Image Registry
 - Kubernetes Deployment
+- Helm Charts
 - Monitoring with Prometheus & Grafana
 - Centralized Logging
+- Disaster Recovery
 
 
 ## License
