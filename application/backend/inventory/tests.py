@@ -8,6 +8,149 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 from .models import Inventory, Order, OrderItem, Product, Warehouse
 
+class OrderStatusWorkflowAPITests(APITestCase):
+    @classmethod
+    def setUpTestData(cls):
+        groups = {
+            name: Group.objects.create(name=name)
+            for name in (
+                "Admin",
+                "Warehouse Manager",
+                "Operator",
+                "Auditor",
+            )
+        }
+        user_model = get_user_model()
+        cls.admin_user = user_model.objects.create_user(
+            username="status-admin"
+        )
+        cls.warehouse_manager = user_model.objects.create_user(
+            username="status-warehouse-manager"
+        )
+        cls.operator = user_model.objects.create_user(
+            username="status-operator"
+        )
+        cls.auditor = user_model.objects.create_user(
+            username="status-auditor"
+        )
+        cls.admin_user.groups.add(groups["Admin"])
+        cls.warehouse_manager.groups.add(groups["Warehouse Manager"])
+        cls.operator.groups.add(groups["Operator"])
+        cls.auditor.groups.add(groups["Auditor"])
+
+    def create_order(self, status=Order.Status.PENDING):
+        return Order.objects.create(user=self.admin_user, status=status)
+
+    def change_status(self, user, order, new_status):
+        self.client.force_authenticate(user)
+        return self.client.post(
+            reverse("order-change-status", args=(order.pk,)),
+            {"status": new_status},
+            format="json",
+        )
+
+    def test_admin_can_change_pending_to_processing(self):
+        order = self.create_order()
+        response = self.change_status(
+            self.admin_user,
+            order,
+            Order.Status.PROCESSING,
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.json()["status"], Order.Status.PROCESSING)
+
+    def test_warehouse_manager_can_change_processing_to_shipped(self):
+        order = self.create_order(status=Order.Status.PROCESSING)
+        response = self.change_status(
+            self.warehouse_manager,
+            order,
+            Order.Status.SHIPPED,
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.json()["status"], Order.Status.SHIPPED)
+
+    def test_operator_cannot_change_status(self):
+        order = self.create_order()
+        response = self.change_status(
+            self.operator,
+            order,
+            Order.Status.PROCESSING,
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_auditor_cannot_change_status(self):
+        order = self.create_order()
+        response = self.change_status(
+            self.auditor,
+            order,
+            Order.Status.PROCESSING,
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_invalid_transition_is_rejected(self):
+        order = self.create_order()
+        response = self.change_status(
+            self.admin_user,
+            order,
+            Order.Status.DELIVERED,
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        order.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.PENDING)
+
+    def test_delivered_order_cannot_change_status(self):
+        order = self.create_order(status=Order.Status.DELIVERED)
+        response = self.change_status(
+            self.admin_user,
+            order,
+            Order.Status.CANCELLED,
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        order.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.DELIVERED)
+
+    def test_successful_transition_updates_database(self):
+        order = self.create_order()
+        self.change_status(
+            self.admin_user,
+            order,
+            Order.Status.PROCESSING,
+        )
+        order.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.PROCESSING)
+
+    def test_response_uses_order_serializer_format(self):
+        order = self.create_order()
+        response = self.change_status(
+            self.admin_user,
+            order,
+            Order.Status.PROCESSING,
+        )
+        self.assertSetEqual(
+            set(response.json()),
+            {
+                "id",
+                "user",
+                "status",
+                "created_at",
+                "updated_at",
+                "items",
+            },
+        )
+        self.assertEqual(response.json()["items"], [])
+
+    def test_status_cannot_be_changed_with_normal_patch(self):
+        order = self.create_order()
+        self.client.force_authenticate(self.admin_user)
+        response = self.client.patch(
+            reverse("order-detail", args=(order.pk,)),
+            {"status": Order.Status.PROCESSING},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        order.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.PENDING)
+
 class OrderCreationAPITests(APITestCase):
     @classmethod
     def setUpTestData(cls):

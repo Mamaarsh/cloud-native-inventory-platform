@@ -1,11 +1,12 @@
 from django.db import DatabaseError, connection
 from drf_spectacular.utils import extend_schema
 from rest_framework import status, viewsets
-from rest_framework.decorators import api_view
+from rest_framework.decorators import action, api_view
 from rest_framework.response import Response
 from users.permissions import (
     InventoryPermission,
     OrderPermission,
+    OrderStatusPermission,
     ProductPermission,
     WarehousePermission,
 )
@@ -14,9 +15,11 @@ from .serializers import (
     InventorySerializer,
     OrderCreateSerializer,
     OrderSerializer,
+    OrderStatusUpdateSerializer,
     ProductSerializer,
     WarehouseSerializer,
 )
+from .services import transition_order_status
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import OrderingFilter, SearchFilter
 
@@ -166,3 +169,27 @@ class OrderViewSet(viewsets.ModelViewSet):
             status=status.HTTP_201_CREATED,
             headers=headers,
         )
+
+    @extend_schema(
+        request=OrderStatusUpdateSerializer,
+        responses={status.HTTP_200_OK: OrderSerializer},
+    )
+    @action(
+        detail=True,
+        methods=("post",),
+        url_path="change-status",
+        permission_classes=(OrderStatusPermission,),
+    )
+    def change_status(self, request, *args, **kwargs):
+        input_serializer = OrderStatusUpdateSerializer(data=request.data)
+        input_serializer.is_valid(raise_exception=True)
+        order = self.get_object()
+        order = transition_order_status(
+            order,
+            input_serializer.validated_data["status"],
+        )
+        response_serializer = OrderSerializer(
+            order,
+            context=self.get_serializer_context(),
+        )
+        return Response(response_serializer.data)

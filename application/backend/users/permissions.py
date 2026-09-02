@@ -88,3 +88,20 @@ class OrderPermission(BasePermission):
         if request.method in {"POST", "DELETE"}:
             return _has_any_role(request.user, ADMIN)
         return False
+
+class OrderStatusPermission(BasePermission):
+    warehouse_manager_transitions = {
+        ("pending", "processing"),
+        ("processing", "shipped"),
+    }
+
+    def has_permission(self, request, view):
+        return _has_any_role(request.user, ADMIN, WAREHOUSE_MANAGER)
+
+    def has_object_permission(self, request, view, obj):
+        if _has_any_role(request.user, ADMIN):
+            return True
+        return (
+            obj.status,
+            request.data.get("status"),
+        ) in self.warehouse_manager_transitions

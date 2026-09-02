@@ -77,10 +77,18 @@ class OrderSerializer(serializers.ModelSerializer):
         read_only_fields = (
             "id",
             "user",
+            "status",
             "created_at",
             "updated_at",
             "items",
         )
+
+    def validate(self, attrs):
+        if self.instance is not None and "status" in self.initial_data:
+            raise serializers.ValidationError(
+                {"status": "Use the change-status endpoint to update status."}
+            )
+        return attrs
 
 class OrderItemCreateSerializer(serializers.Serializer):
     product = serializers.PrimaryKeyRelatedField(
@@ -108,3 +116,6 @@ class OrderCreateSerializer(serializers.Serializer):
                 unit_price=product.price,
             )
         return order
+
+class OrderStatusUpdateSerializer(serializers.Serializer):
+    status = serializers.ChoiceField(choices=Order.Status.choices)
