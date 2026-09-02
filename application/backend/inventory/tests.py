@@ -1,11 +1,145 @@
+from decimal import Decimal
 from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
-from django.db import OperationalError
+from django.db import IntegrityError, OperationalError
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
-from .models import Inventory, Product, Warehouse
+from .models import Inventory, Order, OrderItem, Product, Warehouse
+
+class OrderCreationAPITests(APITestCase):
+    @classmethod
+    def setUpTestData(cls):
+        admin_group = Group.objects.create(name="Admin")
+        cls.user = get_user_model().objects.create_user(
+            username="order-admin",
+            email="orders@example.com",
+        )
+        cls.user.groups.add(admin_group)
+        cls.product = Product.objects.create(
+            name="Active Product",
+            sku="ORDER-001",
+            price="100.00",
+        )
+        cls.second_product = Product.objects.create(
+            name="Second Product",
+            sku="ORDER-002",
+            price="25.50",
+        )
+        cls.inactive_product = Product.objects.create(
+            name="Inactive Product",
+            sku="ORDER-003",
+            price="15.00",
+            is_active=False,
+        )
+
+    def setUp(self):
+        self.client.force_authenticate(self.user)
+        self.url = reverse("order-list")
+
+    def order_payload(self):
+        return {
+            "items": [
+                {"product": self.product.pk, "quantity": 2},
+                {"product": self.second_product.pk, "quantity": 1},
+            ]
+        }
+
+    def test_authenticated_user_can_create_order(self):
+        response = self.client.post(
+            self.url,
+            self.order_payload(),
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.json()["status"], Order.Status.PENDING)
+        self.assertEqual(len(response.json()["items"]), 2)
+
+    def test_created_order_belongs_to_authenticated_user(self):
+        response = self.client.post(
+            self.url,
+            self.order_payload(),
+            format="json",
+        )
+        order = Order.objects.get(pk=response.json()["id"])
+        self.assertEqual(order.user, self.user)
+        self.assertEqual(response.json()["user"]["id"], self.user.pk)
+
+    def test_nested_items_are_created(self):
+        response = self.client.post(
+            self.url,
+            self.order_payload(),
+            format="json",
+        )
+        order = Order.objects.get(pk=response.json()["id"])
+        self.assertEqual(order.items.count(), 2)
+        self.assertSetEqual(
+            set(order.items.values_list("product_id", "quantity")),
+            {
+                (self.product.pk, 2),
+                (self.second_product.pk, 1),
+            },
+        )
+
+    def test_product_price_is_copied_to_order_item(self):
+        response = self.client.post(
+            self.url,
+            {"items": [{"product": self.product.pk, "quantity": 1}]},
+            format="json",
+        )
+        item = OrderItem.objects.get(order_id=response.json()["id"])
+        self.assertEqual(item.unit_price, Decimal("100.00"))
+        self.product.price = "200.00"
+        self.product.save(update_fields=("price",))
+        item.refresh_from_db()
+        self.assertEqual(str(item.unit_price), "100.00")
+
+    def test_inactive_product_is_rejected(self):
+        response = self.client.post(
+            self.url,
+            {
+                "items": [
+                    {"product": self.inactive_product.pk, "quantity": 1}
+                ]
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(Order.objects.exists())
+
+    def test_zero_quantity_is_rejected(self):
+        response = self.client.post(
+            self.url,
+            {"items": [{"product": self.product.pk, "quantity": 0}]},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(Order.objects.exists())
+
+    def test_client_cannot_override_initial_status(self):
+        payload = self.order_payload()
+        payload["status"] = Order.Status.SHIPPED
+        response = self.client.post(self.url, payload, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        order = Order.objects.get(pk=response.json()["id"])
+        self.assertEqual(order.status, Order.Status.PENDING)
+        self.assertEqual(response.json()["status"], Order.Status.PENDING)
+
+    @patch(
+        "inventory.serializers.OrderItem.objects.create",
+        side_effect=IntegrityError("Simulated item creation failure"),
+    )
+    def test_failed_item_creation_rolls_back_order(self, mocked_create):
+        self.client.raise_request_exception = False
+        response = self.client.post(
+            self.url,
+            self.order_payload(),
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_500_INTERNAL_SERVER_ERROR)
+        self.assertFalse(Order.objects.exists())
+        mocked_create.assert_called_once()
 
 class InventoryRBACAPITests(APITestCase):
     @classmethod

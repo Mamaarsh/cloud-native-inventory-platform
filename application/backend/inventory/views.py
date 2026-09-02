@@ -1,4 +1,5 @@
 from django.db import DatabaseError, connection
+from drf_spectacular.utils import extend_schema
 from rest_framework import status, viewsets
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -11,6 +12,7 @@ from users.permissions import (
 from .models import Inventory, Order, Product, Warehouse
 from .serializers import (
     InventorySerializer,
+    OrderCreateSerializer,
     OrderSerializer,
     ProductSerializer,
     WarehouseSerializer,
@@ -140,3 +142,27 @@ class OrderViewSet(viewsets.ModelViewSet):
         "updated_at",
         "status",
     )
+
+    def get_serializer_class(self):
+        if self.action == "create":
+            return OrderCreateSerializer
+        return OrderSerializer
+
+    @extend_schema(
+        request=OrderCreateSerializer,
+        responses={status.HTTP_201_CREATED: OrderSerializer},
+    )
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        order = serializer.save()
+        response_serializer = OrderSerializer(
+            order,
+            context=self.get_serializer_context(),
+        )
+        headers = self.get_success_headers(response_serializer.data)
+        return Response(
+            response_serializer.data,
+            status=status.HTTP_201_CREATED,
+            headers=headers,
+        )
