@@ -1,34 +1,58 @@
 # Cloud Native Inventory Platform
 
-A production-oriented inventory and order management platform built with Django REST Framework, PostgreSQL, Docker, and cloud-native principles.
+## Description
 
-This project demonstrates backend engineering practices and DevOps workflows including authentication, authorization, containerization, CI/CD, Kubernetes, monitoring, and observability.
+This project is a production-oriented inventory and order management platform built with Django REST Framework and PostgreSQL.
+
+The system provides a secure and scalable REST API for managing products, warehouses, inventory operations, and orders.
+
+The implementation focuses on clean architecture, JWT authentication, Role-Based Access Control (RBAC), transactional business logic, and cloud-native development practices.
 
 ---
 
-## 🚀 Features
+## Features
+
+- RESTful API built with Django REST Framework
+- Secure JWT authentication and authorization
+- Role-Based Access Control (RBAC)
+- Product management
+- Warehouse management
+- Inventory tracking
+- Order management
+- Transaction-safe order creation
+- Order status workflow
+- PostgreSQL database integration
+- Swagger / OpenAPI documentation
+- Health check endpoints
+
+
+---
+
+## Technologies Used
 
 ### Backend
 
-- Django REST Framework API
-- PostgreSQL Database
-- Custom Django User Model
+- Python
+- Django
+- Django REST Framework
+- PostgreSQL
 - JWT Authentication
-- Role-Based Access Control (RBAC)
-- Swagger / OpenAPI Documentation
 
 
-### Business Features
+### DevOps
 
-- Product Management
-- Warehouse Management
-- Inventory Tracking
-- Order Management
-- Transaction-safe Order Creation
-- Order Status Workflow
+- Docker
+- Git
+- CI/CD (planned)
+- Kubernetes (planned)
+- Prometheus & Grafana (planned)
 
 
-### Authorization Roles
+---
+
+## Authorization Roles
+
+The system implements the following roles:
 
 - Admin
 - Warehouse Manager
@@ -38,45 +62,38 @@ This project demonstrates backend engineering practices and DevOps workflows inc
 
 ---
 
-## 🛠️ Tech Stack
-
-- Python
-- Django
-- Django REST Framework
-- PostgreSQL
-- JWT
-- Docker
-- Git
-- Kubernetes (planned)
-- CI/CD (planned)
-- Prometheus & Grafana (planned)
-
-
----
-
-## 🏗️ Architecture
+## Architecture
 
 The application follows a layered architecture:
 
-Client → Django REST API → Authentication & RBAC → Business Logic Layer → PostgreSQL
+Client
 
+↓
 
-Main components:
+Django REST API
 
-- API Layer: Handles requests, validation, serialization, authentication, and permissions.
-- Business Logic Layer: Contains application rules such as order workflow and transaction management.
-- Data Layer: Uses Django ORM with PostgreSQL.
+↓
+
+Authentication & Authorization Layer
+
+↓
+
+Business Logic Layer
+
+↓
+
+PostgreSQL Database
 
 
 Detailed documentation:
 
-- docs/architecture.md
-- docs/api.md
+- Architecture: docs/architecture.md
+- API Reference: docs/api.md
 
 
 ---
 
-## 📚 API Documentation
+## API Documentation
 
 Swagger UI:
 
@@ -90,44 +107,55 @@ OpenAPI Schema:
 
 ---
 
-## ▶️ Run Locally
+## Installation
 
-Clone repository:
+1. Clone the repository:
 
 git clone https://github.com/Mamaarsh/cloud-native-inventory-platform.git
 
 
-Install dependencies:
+2. Navigate to backend directory:
+
+cd cloud-native-inventory-platform/application/backend
+
+
+3. Install dependencies:
 
 pip install -r requirements.txt
 
 
-Apply migrations:
+4. Configure environment variables:
+
+cp .env.example .env
+
+
+5. Apply migrations:
 
 python manage.py migrate
 
 
-Create default roles:
+6. Create default roles:
 
 python manage.py create_roles
 
 
-Run application:
+7. Run the development server:
 
 python manage.py runserver
 
 
 ---
 
-## 🧪 Testing
+## Testing
 
-Implemented tests cover:
+The project includes tests for:
 
-- JWT Authentication
-- RBAC Permissions
-- Order Creation
-- Order Status Workflow
-- Health Checks
+- Authentication
+- JWT flow
+- RBAC permissions
+- Order creation
+- Order workflow
+- Health checks
 
 
 Run tests:
@@ -137,43 +165,77 @@ python manage.py test
 
 ---
 
-## 🗺️ Roadmap
+## Roadmap
 
-Application:
+### Application
 
-✅ Backend Foundation  
-✅ JWT Authentication  
-✅ RBAC Authorization  
-✅ Inventory Management  
-✅ Order Management  
-✅ Order Workflow  
+[x] Backend foundation
+
+[x] JWT Authentication
+
+[x] RBAC Authorization
+
+[x] Inventory Management
+
+[x] Order Management
+
+[x] Order Workflow
+
 
 Upcoming:
 
-⬜ Stock Management  
-⬜ Payment Module  
-⬜ Notification Service  
+[ ] Stock Management
+
+[ ] Payment Module
+
+[ ] Notification Service
 
 
-DevOps:
+### DevOps
 
-⬜ Production Docker Compose  
-⬜ CI/CD Pipeline  
-⬜ Kubernetes Deployment  
-⬜ Helm Charts  
-⬜ Prometheus Monitoring  
-⬜ Grafana Dashboards  
-⬜ Centralized Logging
+Upcoming:
+
+[ ] Production Docker Compose
+
+[ ] CI/CD Pipeline
+
+[ ] Kubernetes Deployment
+
+[ ] Helm Charts
+
+[ ] Prometheus Monitoring
+
+[ ] Grafana Dashboards
+
+[ ] Centralized Logging
+
 
 ---
 
-## 📖 Documentation
+## Documentation
 
-- Architecture: docs/architecture.md
-- API Reference: docs/api.md
+- Architecture Documentation: docs/architecture.md
+- API Documentation: docs/api.md
+
+
+---
+
+## Contributing
+
+If you would like to contribute to this project, please fork the repository and submit a pull request.
+
 
 ---
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the MIT License.
+
+See the LICENSE file for details.
+
+
+---
+
+## Author
+
+- Mohammad Arshia Jafari - Backend Developer
