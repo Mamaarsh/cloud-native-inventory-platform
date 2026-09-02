@@ -229,21 +229,6 @@ docs/api.md
 
 ---
 
-# 🎯 Project Goal
-
-This project demonstrates practical experience with:
-
-- Backend Engineering
-- REST API Design
-- Database Architecture
-- Secure Application Development
-- Containerization
-- Cloud Native Deployment
-- DevOps Automation
-
-
----
-
 # License
 
 MIT License
