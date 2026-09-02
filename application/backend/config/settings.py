@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'inventory',
     'users',
+    'drf_spectacular',
 ]
 
 AUTH_USER_MODEL = 'users.User'
@@ -50,6 +51,32 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
+    'DEFAULT_SCHEMA_CLASS': (
+        'drf_spectacular.openapi.AutoSchema'
+    ),
+}
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'cloud Native Inventory platform API',
+    'DESCRIPTION': (
+        'production-orented inventory and order management API'
+    ),
+    'VERSION': '1.0.0',
+    'SECURITY': [
+        {
+            'BearerAuth': []
+        }
+    ],
+    'COMPONENT_SPLIT_REQUEST': True,
+    'COMPONENTS': {
+        'securitySchemes': {
+            'BearerAuth': {
+                'type': 'http',
+                'scheme': 'bearer',
+                'bearerFormat': 'JWT',
+            }
+        }
+    }
 }
 
 MIDDLEWARE = [
