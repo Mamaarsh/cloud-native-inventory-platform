@@ -2,6 +2,12 @@ from django.db import DatabaseError, connection
 from rest_framework import status, viewsets
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
+from users.permissions import (
+    InventoryPermission,
+    OrderPermission,
+    ProductPermission,
+    WarehousePermission,
+)
 from .models import Inventory, Order, Product, Warehouse
 from .serializers import (
     InventorySerializer,
@@ -37,10 +43,12 @@ def health_ready(request):
 class ProductViewSet(viewsets.ModelViewSet):
     queryset = Product.objects.all().order_by("-created_at")
     serializer_class = ProductSerializer
+    permission_classes = (ProductPermission,)
 
 class WarehouseViewSet(viewsets.ModelViewSet):
     queryset = Warehouse.objects.all().order_by("-created_at")
     serializer_class = WarehouseSerializer
+    permission_classes = (WarehousePermission,)
 
 class InventoryViewSet(viewsets.ModelViewSet):
     queryset = Inventory.objects.all().select_related(
@@ -48,6 +56,7 @@ class InventoryViewSet(viewsets.ModelViewSet):
         "warehouse",
     )
     serializer_class = InventorySerializer
+    permission_classes = (InventoryPermission,)
 
 class OrderViewSet(viewsets.ModelViewSet):
     queryset = Order.objects.all().select_related(
@@ -57,3 +66,4 @@ class OrderViewSet(viewsets.ModelViewSet):
         "items__product",
     )
     serializer_class = OrderSerializer
+    permission_classes = (OrderPermission,)
