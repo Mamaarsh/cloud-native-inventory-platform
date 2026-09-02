@@ -15,6 +15,8 @@ from .serializers import (
     ProductSerializer,
     WarehouseSerializer,
 )
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework.filters import OrderingFilter, SearchFilter
 
 @api_view(["GET"])
 def health_live(request):
@@ -44,11 +46,44 @@ class ProductViewSet(viewsets.ModelViewSet):
     queryset = Product.objects.all().order_by("-created_at")
     serializer_class = ProductSerializer
     permission_classes = (ProductPermission,)
+    filter_backends = (
+        DjangoFilterBackend, 
+        SearchFilter, 
+        OrderingFilter,
+    )
+    filterset_fields = (
+        'sku',
+    )
+    search_fields = (
+        'name',
+        'sku',
+    )
+    ordering_fields = (
+        'name',
+        'price',
+        'created_at',
+    )
 
 class WarehouseViewSet(viewsets.ModelViewSet):
     queryset = Warehouse.objects.all().order_by("-created_at")
     serializer_class = WarehouseSerializer
     permission_classes = (WarehousePermission,)
+    filter_backends = (
+        DjangoFilterBackend,
+        SearchFilter,
+        OrderingFilter,
+    )
+    filterset_fields = (
+        "location",
+    )
+    search_fields = (
+        "name",
+        "location",
+    )
+    ordering_fields = (
+        "name",
+        "created_at",
+    )
 
 class InventoryViewSet(viewsets.ModelViewSet):
     queryset = Inventory.objects.all().select_related(
@@ -57,6 +92,24 @@ class InventoryViewSet(viewsets.ModelViewSet):
     )
     serializer_class = InventorySerializer
     permission_classes = (InventoryPermission,)
+    filter_backends = (
+        DjangoFilterBackend,
+        SearchFilter,
+        OrderingFilter,
+    )
+    filterset_fields = (
+        "product",
+        "warehouse",
+    )
+    search_fields = (
+        "product__name",
+        "product__sku",
+        "warehouse__name",
+    )
+    ordering_fields = (
+        "quantity",
+        "updated_at",
+    )
 
 class OrderViewSet(viewsets.ModelViewSet):
     queryset = Order.objects.all().select_related(
@@ -67,3 +120,23 @@ class OrderViewSet(viewsets.ModelViewSet):
     )
     serializer_class = OrderSerializer
     permission_classes = (OrderPermission,)
+    filter_backends = (
+        DjangoFilterBackend,
+        SearchFilter,
+        OrderingFilter,
+    )
+    filterset_fields = (
+        "status",
+        "user",
+    )
+    search_fields = (
+        "user__username",
+        "user__email",
+        "items__product__name",
+        "items__product__sku",
+    )
+    ordering_fields = (
+        "created_at",
+        "updated_at",
+        "status",
+    )

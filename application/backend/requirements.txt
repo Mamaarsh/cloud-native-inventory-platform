@@ -4,3 +4,4 @@ djangorestframework-simplejwt>=5.5,<6.0
 psycopg[binary]>=3.2,<4.0
 gunicorn>=23,<24
 drf-spectacular>=0.28,<1.0
+django-filter>=25.0,<26.0
