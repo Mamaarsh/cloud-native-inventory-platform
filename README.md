@@ -165,7 +165,6 @@ DevOps:
 ⬜ Grafana Dashboards  
 ⬜ Centralized Logging
 
-
 ---
 
 ## 📖 Documentation
@@ -173,9 +172,8 @@ DevOps:
 - Architecture: docs/architecture.md
 - API Reference: docs/api.md
 
-
 ---
 
 ## License
 
-MIT License
+This project is licensed under the MIT License - see the LICENSE file for details.
