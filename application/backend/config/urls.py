@@ -48,8 +48,8 @@ urlpatterns = [
     ),
 
     path(
-        "api/",
-        include("inventory.urls")
+        "api/v1/",
+        include("inventory.api.v1.urls")
     ),
 
     path(
