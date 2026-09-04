@@ -1,3 +1,4 @@
+import logging
 from celery import shared_task
 from django.db import transaction
 from django.utils import timezone
@@ -6,6 +7,8 @@ from inventory.services.notification_providers import (
     NotificationProviderError,
     mock_notification_provider,
 )
+
+logger = logging.getLogger(__name__)
 
 @shared_task(
     bind=True,
@@ -29,6 +32,12 @@ def send_notification(self, notification_id):
             Notification.Status.FAILED,
         }:
             return notification.status
+        attempt_number = notification.attempts + 1
+        logger.info(
+            "Notification delivery started notification=%s attempt=%s",
+            notification.pk,
+            attempt_number,
+        )
         recipient = notification.user.email or notification.user.username
         try:
             result = mock_notification_provider.send(
@@ -62,9 +71,44 @@ def send_notification(self, notification_id):
                 "updated_at",
             )
         )
+        if result is not None and result.success:
+            logger.info(
+                "Notification successfully sent notification=%s attempt=%s "
+                "provider_reference=%s",
+                notification.pk,
+                attempt_number,
+                notification.provider_reference,
+            )
+        else:
+            provider_reference = (
+                result.provider_reference if result is not None else None
+            )
+            logger.warning(
+                "Notification provider failure notification=%s attempt=%s "
+                "provider_reference=%s",
+                notification.pk,
+                attempt_number,
+                provider_reference,
+            )
+            if notification.status == Notification.Status.FAILED:
+                logger.error(
+                    "Notification terminal failure notification=%s attempt=%s "
+                    "provider_reference=%s",
+                    notification.pk,
+                    attempt_number,
+                    provider_reference,
+                )
     if retry_error and self.request.retries < self.max_retries:
+        countdown = min(2 ** self.request.retries, 30)
+        logger.warning(
+            "Notification retry scheduled notification=%s attempt=%s "
+            "countdown=%s",
+            notification.pk,
+            attempt_number,
+            countdown,
+        )
         raise self.retry(
             exc=NotificationProviderError(retry_error),
-            countdown=min(2 ** self.request.retries, 30),
+            countdown=countdown,
         )
     return notification.status

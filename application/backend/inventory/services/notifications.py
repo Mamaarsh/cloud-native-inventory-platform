@@ -1,7 +1,10 @@
+import logging
 from functools import partial
 from django.db import transaction
 from rest_framework.exceptions import ValidationError
 from inventory.models import Notification
+
+logger = logging.getLogger(__name__)
 
 NOTIFICATION_MESSAGES = {
     Notification.EventType.PAYMENT_SUCCEEDED: (
@@ -25,6 +28,23 @@ def build_notification_message(*, order_id, event_type):
 def build_idempotency_key(*, order_id, event_type):
     return f"{event_type}:order:{order_id}"
 
+def _schedule_notification_delivery(
+    notification_id,
+    order_id,
+    event_type,
+    idempotency_key,
+):
+    from inventory.tasks import send_notification
+
+    logger.info(
+        "Notification scheduled after commit for order=%s event_type=%s "
+        "idempotency_key=%s",
+        order_id,
+        event_type,
+        idempotency_key,
+    )
+    send_notification.delay(notification_id)
+
 @transaction.atomic
 def create_notification(*, user, order, event_type):
     idempotency_key = build_idempotency_key(
@@ -45,9 +65,29 @@ def create_notification(*, user, order, event_type):
         },
     )
     if created:
-        from inventory.tasks import send_notification
+        logger.info(
+            "Notification created for order=%s event_type=%s "
+            "idempotency_key=%s",
+            order.pk,
+            event_type,
+            idempotency_key,
+        )
         transaction.on_commit(
-            partial(send_notification.delay, notification.pk),
+            partial(
+                _schedule_notification_delivery,
+                notification.pk,
+                order.pk,
+                event_type,
+                idempotency_key,
+            ),
             robust=True,
+        )
+    else:
+        logger.info(
+            "Existing notification returned for order=%s event_type=%s "
+            "idempotency_key=%s",
+            order.pk,
+            event_type,
+            idempotency_key,
         )
     return notification, created

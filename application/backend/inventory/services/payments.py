@@ -1,9 +1,12 @@
+import logging
 from django.db import models, transaction
 from rest_framework.exceptions import ValidationError
 from inventory.models import Notification, Order, Payment
 from inventory.services.notifications import create_notification
 from inventory.services.order_status import transition_order_status
 from inventory.services.payment_providers import mock_payment_provider
+
+logger = logging.getLogger(__name__)
 
 def calculate_order_total(order):
     total = order.items.aggregate(
@@ -23,6 +26,7 @@ def calculate_order_total(order):
 
 @transaction.atomic
 def process_payment(order):
+    logger.info("Payment processing started for order=%s", order.pk)
     locked_order = Order.objects.select_for_update().get(pk=order.pk)
     if locked_order.status in {
         Order.Status.CANCELLED,
@@ -42,6 +46,13 @@ def process_payment(order):
         .first()
     )
     if payment and payment.status == Payment.Status.SUCCEEDED:
+        logger.info(
+            "Existing successful payment returned for order=%s payment=%s "
+            "provider_reference=%s",
+            locked_order.pk,
+            payment.pk,
+            payment.provider_reference,
+        )
         return payment, False
     amount = calculate_order_total(locked_order)
     created = payment is None
@@ -65,6 +76,20 @@ def process_payment(order):
     )
     payment.provider_reference = result.provider_reference
     payment.save()
+    if result.success:
+        logger.info(
+            "Payment succeeded for order=%s payment=%s provider_reference=%s",
+            locked_order.pk,
+            payment.pk,
+            payment.provider_reference,
+        )
+    else:
+        logger.warning(
+            "Payment failed for order=%s payment=%s provider_reference=%s",
+            locked_order.pk,
+            payment.pk,
+            payment.provider_reference,
+        )
     if result.success and locked_order.status == Order.Status.PENDING:
         transition_order_status(
             locked_order,
