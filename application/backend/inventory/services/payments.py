@@ -1,6 +1,7 @@
 from django.db import models, transaction
 from rest_framework.exceptions import ValidationError
-from inventory.models import Order, Payment
+from inventory.models import Notification, Order, Payment
+from inventory.services.notifications import create_notification
 from inventory.services.order_status import transition_order_status
 from inventory.services.payment_providers import mock_payment_provider
 
@@ -68,5 +69,11 @@ def process_payment(order):
         transition_order_status(
             locked_order,
             Order.Status.PROCESSING,
+        )
+    if result.success:
+        create_notification(
+            user=locked_order.user,
+            order=locked_order,
+            event_type=Notification.EventType.PAYMENT_SUCCEEDED,
         )
     return payment, created

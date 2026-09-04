@@ -11,7 +11,15 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.exceptions import ValidationError
 from rest_framework.test import APITestCase
-from .models import Inventory, Order, OrderItem, Payment, Product, Warehouse
+from .models import (
+    Inventory,
+    Notification,
+    Order,
+    OrderItem,
+    Payment,
+    Product,
+    Warehouse,
+)
 from .services import create_order, process_payment
 from .services.payment_providers import PaymentProviderResult
 
@@ -232,10 +240,13 @@ class PaymentConcurrencyTests(TransactionTestCase):
             success=True,
             provider_reference="mock_concurrent",
         )
-        with patch(
-            "inventory.services.payments.mock_payment_provider.charge",
-            return_value=provider_result,
-        ) as mocked_charge:
+        with (
+            patch(
+                "inventory.services.payments.mock_payment_provider.charge",
+                return_value=provider_result,
+            ) as mocked_charge,
+            patch("inventory.tasks.send_notification.delay") as mocked_delivery,
+        ):
             with ThreadPoolExecutor(max_workers=2) as executor:
                 results = list(
                     executor.map(lambda _: attempt_payment(), range(2))
@@ -245,7 +256,9 @@ class PaymentConcurrencyTests(TransactionTestCase):
         self.assertEqual(len(payment_ids), 1)
         self.assertCountEqual(created_flags, (True, False))
         self.assertEqual(Payment.objects.count(), 1)
+        self.assertEqual(Notification.objects.count(), 1)
         mocked_charge.assert_called_once()
+        mocked_delivery.assert_called_once()
         self.order.refresh_from_db()
         self.assertEqual(self.order.status, Order.Status.PROCESSING)
 

@@ -1,6 +1,7 @@
 from django.db import transaction
 from rest_framework.exceptions import ValidationError
-from inventory.models import Order
+from inventory.models import Notification, Order
+from inventory.services.notifications import create_notification
 
 ALLOWED_STATUS_TRANSITIONS = {
     Order.Status.PENDING: {
@@ -31,4 +32,14 @@ def transition_order_status(order, new_status):
         )
     locked_order.status = new_status
     locked_order.save(update_fields=("status", "updated_at"))
+    notification_event = {
+        Order.Status.SHIPPED: Notification.EventType.ORDER_SHIPPED,
+        Order.Status.DELIVERED: Notification.EventType.ORDER_DELIVERED,
+    }.get(new_status)
+    if notification_event:
+        create_notification(
+            user=locked_order.user,
+            order=locked_order,
+            event_type=notification_event,
+        )
     return locked_order

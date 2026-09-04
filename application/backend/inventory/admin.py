@@ -1,5 +1,13 @@
 from django.contrib import admin
-from .models import Inventory, Order, OrderItem, Payment, Product, Warehouse
+from .models import (
+    Inventory,
+    Notification,
+    Order,
+    OrderItem,
+    Payment,
+    Product,
+    Warehouse,
+)
 
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
@@ -87,4 +95,29 @@ class PaymentAdmin(admin.ModelAdmin):
         "provider_reference",
         "order__id",
         "order__user__username",
+    )
+
+@admin.register(Notification)
+class NotificationAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "user",
+        "order",
+        "event_type",
+        "channel",
+        "status",
+        "attempts",
+        "created_at",
+        "sent_at",
+    )
+    list_filter = (
+        "status",
+        "event_type",
+        "channel",
+    )
+    search_fields = (
+        "user__username",
+        "order__id",
+        "provider_reference",
+        "idempotency_key",
     )

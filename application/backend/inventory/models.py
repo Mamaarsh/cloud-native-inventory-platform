@@ -126,6 +126,60 @@ class Payment(models.Model):
     def __str__(self):
         return f"Payment for order #{self.order_id} - {self.status}"
 
+class Notification(models.Model):
+    class EventType(models.TextChoices):
+        PAYMENT_SUCCEEDED = "payment_succeeded", "Payment succeeded"
+        ORDER_SHIPPED = "order_shipped", "Order shipped"
+        ORDER_DELIVERED = "order_delivered", "Order delivered"
+
+    class Channel(models.TextChoices):
+        EMAIL = "email", "Email"
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        SENT = "sent", "Sent"
+        FAILED = "failed", "Failed"
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="notifications",
+    )
+    order = models.ForeignKey(
+        Order,
+        on_delete=models.PROTECT,
+        related_name="notifications",
+    )
+    event_type = models.CharField(
+        max_length=40,
+        choices=EventType.choices,
+    )
+    channel = models.CharField(
+        max_length=20,
+        choices=Channel.choices,
+        default=Channel.EMAIL,
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.PENDING,
+    )
+    message = models.TextField()
+    provider_reference = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+    )
+    idempotency_key = models.CharField(max_length=255, unique=True)
+    attempts = models.PositiveIntegerField(default=0)
+    last_error = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    sent_at = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        return f"Notification #{self.id} - {self.event_type} - {self.status}"
+
 # Module-level aliases let drf-spectacular assign stable, distinct schema names
 # while preserving the established Order.Status and Payment.Status APIs.
 OrderStatus = Order.Status
