@@ -63,6 +63,7 @@ class OrderItemAdmin(admin.ModelAdmin):
         "id",
         "order",
         "product",
+        "warehouse",
         "quantity",
         "unit_price",
     )

@@ -1,6 +1,6 @@
-from django.db import transaction
 from rest_framework import serializers
 from .models import Inventory, Order, OrderItem, Product, Warehouse
+from .services import create_order
 
 class ProductSerializer(serializers.ModelSerializer):
     class Meta:
@@ -39,6 +39,15 @@ class OrderProductSerializer(serializers.ModelSerializer):
             "sku",
         )
 
+class OrderWarehouseSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Warehouse
+        fields = (
+            "id",
+            "name",
+            "location",
+        )
+
 class OrderUserSerializer(serializers.Serializer):
     id = serializers.IntegerField(read_only=True)
     username = serializers.CharField(read_only=True)
@@ -46,12 +55,14 @@ class OrderUserSerializer(serializers.Serializer):
 
 class OrderItemSerializer(serializers.ModelSerializer):
     product = OrderProductSerializer(read_only=True)
+    warehouse = OrderWarehouseSerializer(read_only=True)
 
     class Meta:
         model = OrderItem
         fields = (
             "id",
             "product",
+            "warehouse",
             "quantity",
             "unit_price",
         )
@@ -94,6 +105,9 @@ class OrderItemCreateSerializer(serializers.Serializer):
     product = serializers.PrimaryKeyRelatedField(
         queryset=Product.objects.all()
     )
+    warehouse = serializers.PrimaryKeyRelatedField(
+        queryset=Warehouse.objects.all()
+    )
     quantity = serializers.IntegerField(min_value=1)
 
     def validate_product(self, product):
@@ -104,18 +118,11 @@ class OrderItemCreateSerializer(serializers.Serializer):
 class OrderCreateSerializer(serializers.Serializer):
     items = OrderItemCreateSerializer(many=True, allow_empty=False)
 
-    @transaction.atomic
     def create(self, validated_data):
-        order = Order.objects.create(user=self.context["request"].user)
-        for item_data in validated_data["items"]:
-            product = item_data["product"]
-            OrderItem.objects.create(
-                order=order,
-                product=product,
-                quantity=item_data["quantity"],
-                unit_price=product.price,
-            )
-        return order
+        return create_order(
+            user=self.context["request"].user,
+            items=validated_data["items"],
+        )
 
 class OrderStatusUpdateSerializer(serializers.Serializer):
     status = serializers.ChoiceField(choices=Order.Status.choices)

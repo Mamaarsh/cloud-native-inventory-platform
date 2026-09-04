@@ -1,12 +1,18 @@
 from decimal import Decimal
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
+from django.db import close_old_connections
 from django.db import IntegrityError, OperationalError
+from django.test import TransactionTestCase, skipUnlessDBFeature
 from django.urls import reverse
 from rest_framework import status
+from rest_framework.exceptions import ValidationError
 from rest_framework.test import APITestCase
 from .models import Inventory, Order, OrderItem, Product, Warehouse
+from .services import create_order
 
 class OrderStatusWorkflowAPITests(APITestCase):
     @classmethod
@@ -176,6 +182,20 @@ class OrderCreationAPITests(APITestCase):
             price="15.00",
             is_active=False,
         )
+        cls.warehouse = Warehouse.objects.create(
+            name="Order Warehouse",
+            location="Order Test Location",
+        )
+        Inventory.objects.create(
+            product=cls.product,
+            warehouse=cls.warehouse,
+            quantity=100,
+        )
+        Inventory.objects.create(
+            product=cls.second_product,
+            warehouse=cls.warehouse,
+            quantity=100,
+        )
 
     def setUp(self):
         self.client.force_authenticate(self.user)
@@ -184,8 +204,16 @@ class OrderCreationAPITests(APITestCase):
     def order_payload(self):
         return {
             "items": [
-                {"product": self.product.pk, "quantity": 2},
-                {"product": self.second_product.pk, "quantity": 1},
+                {
+                    "product": self.product.pk,
+                    "warehouse": self.warehouse.pk,
+                    "quantity": 2,
+                },
+                {
+                    "product": self.second_product.pk,
+                    "warehouse": self.warehouse.pk,
+                    "quantity": 1,
+                },
             ]
         }
 
@@ -228,7 +256,15 @@ class OrderCreationAPITests(APITestCase):
     def test_product_price_is_copied_to_order_item(self):
         response = self.client.post(
             self.url,
-            {"items": [{"product": self.product.pk, "quantity": 1}]},
+            {
+                "items": [
+                    {
+                        "product": self.product.pk,
+                        "warehouse": self.warehouse.pk,
+                        "quantity": 1,
+                    }
+                ]
+            },
             format="json",
         )
         item = OrderItem.objects.get(order_id=response.json()["id"])
@@ -243,7 +279,11 @@ class OrderCreationAPITests(APITestCase):
             self.url,
             {
                 "items": [
-                    {"product": self.inactive_product.pk, "quantity": 1}
+                    {
+                        "product": self.inactive_product.pk,
+                        "warehouse": self.warehouse.pk,
+                        "quantity": 1,
+                    }
                 ]
             },
             format="json",
@@ -254,7 +294,15 @@ class OrderCreationAPITests(APITestCase):
     def test_zero_quantity_is_rejected(self):
         response = self.client.post(
             self.url,
-            {"items": [{"product": self.product.pk, "quantity": 0}]},
+            {
+                "items": [
+                    {
+                        "product": self.product.pk,
+                        "warehouse": self.warehouse.pk,
+                        "quantity": 0,
+                    }
+                ]
+            },
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
@@ -270,7 +318,7 @@ class OrderCreationAPITests(APITestCase):
         self.assertEqual(response.json()["status"], Order.Status.PENDING)
 
     @patch(
-        "inventory.serializers.OrderItem.objects.create",
+        "inventory.services.orders.OrderItem.objects.bulk_create",
         side_effect=IntegrityError("Simulated item creation failure"),
     )
     def test_failed_item_creation_rolls_back_order(self, mocked_create):
@@ -282,7 +330,291 @@ class OrderCreationAPITests(APITestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_500_INTERNAL_SERVER_ERROR)
         self.assertFalse(Order.objects.exists())
+        inventories = Inventory.objects.filter(
+            warehouse=self.warehouse
+        ).order_by("product_id")
+        self.assertEqual(
+            list(inventories.values_list("quantity", flat=True)),
+            [100, 100],
+        )
         mocked_create.assert_called_once()
+
+class OrderStockManagementAPITests(APITestCase):
+    @classmethod
+    def setUpTestData(cls):
+        admin_group = Group.objects.create(name="Admin")
+        cls.user = get_user_model().objects.create_user(
+            username="stock-admin"
+        )
+        cls.user.groups.add(admin_group)
+        cls.primary_warehouse = Warehouse.objects.create(
+            name="Primary Warehouse",
+            location="Primary Location",
+        )
+        cls.secondary_warehouse = Warehouse.objects.create(
+            name="Secondary Warehouse",
+            location="Secondary Location",
+        )
+        cls.first_product = Product.objects.create(
+            name="First Stock Product",
+            sku="STOCK-001",
+            price="12.50",
+        )
+        cls.second_product = Product.objects.create(
+            name="Second Stock Product",
+            sku="STOCK-002",
+            price="30.00",
+        )
+        cls.first_inventory = Inventory.objects.create(
+            product=cls.first_product,
+            warehouse=cls.primary_warehouse,
+            quantity=10,
+        )
+        cls.second_inventory = Inventory.objects.create(
+            product=cls.second_product,
+            warehouse=cls.secondary_warehouse,
+            quantity=20,
+        )
+
+    def setUp(self):
+        self.client.force_authenticate(self.user)
+        self.url = reverse("order-list")
+
+    def item(self, product, warehouse, quantity):
+        return {
+            "product": product.pk,
+            "warehouse": warehouse.pk,
+            "quantity": quantity,
+        }
+
+    def test_successful_order_decreases_inventory(self):
+        response = self.client.post(
+            self.url,
+            {
+                "items": [
+                    self.item(
+                        self.first_product,
+                        self.primary_warehouse,
+                        4,
+                    )
+                ]
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.first_inventory.refresh_from_db()
+        self.assertEqual(self.first_inventory.quantity, 6)
+
+    def test_insufficient_stock_creates_no_order_or_items(self):
+        response = self.client.post(
+            self.url,
+            {
+                "items": [
+                    self.item(
+                        self.first_product,
+                        self.primary_warehouse,
+                        11,
+                    )
+                ]
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("Insufficient stock", response.json()["items"][0])
+        self.assertFalse(Order.objects.exists())
+        self.assertFalse(OrderItem.objects.exists())
+
+    def test_multiple_items_decrease_respective_inventory(self):
+        response = self.client.post(
+            self.url,
+            {
+                "items": [
+                    self.item(
+                        self.first_product,
+                        self.primary_warehouse,
+                        3,
+                    ),
+                    self.item(
+                        self.second_product,
+                        self.secondary_warehouse,
+                        5,
+                    ),
+                ]
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.first_inventory.refresh_from_db()
+        self.second_inventory.refresh_from_db()
+        self.assertEqual(self.first_inventory.quantity, 7)
+        self.assertEqual(self.second_inventory.quantity, 15)
+
+    def test_one_failed_item_rolls_back_entire_stock_operation(self):
+        response = self.client.post(
+            self.url,
+            {
+                "items": [
+                    self.item(
+                        self.first_product,
+                        self.primary_warehouse,
+                        2,
+                    ),
+                    self.item(
+                        self.second_product,
+                        self.secondary_warehouse,
+                        21,
+                    ),
+                ]
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.first_inventory.refresh_from_db()
+        self.second_inventory.refresh_from_db()
+        self.assertEqual(self.first_inventory.quantity, 10)
+        self.assertEqual(self.second_inventory.quantity, 20)
+        self.assertFalse(Order.objects.exists())
+        self.assertFalse(OrderItem.objects.exists())
+
+    def test_inventory_never_becomes_negative(self):
+        response = self.client.post(
+            self.url,
+            {
+                "items": [
+                    self.item(
+                        self.first_product,
+                        self.primary_warehouse,
+                        100,
+                    )
+                ]
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.first_inventory.refresh_from_db()
+        self.assertEqual(self.first_inventory.quantity, 10)
+        self.assertGreaterEqual(self.first_inventory.quantity, 0)
+
+    def test_duplicate_items_are_aggregated_for_stock_validation(self):
+        duplicate_item = self.item(
+            self.first_product,
+            self.primary_warehouse,
+            6,
+        )
+
+        response = self.client.post(
+            self.url,
+            {"items": [duplicate_item, duplicate_item]},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.first_inventory.refresh_from_db()
+        self.assertEqual(self.first_inventory.quantity, 10)
+        self.assertFalse(Order.objects.exists())
+
+    def test_missing_inventory_returns_bad_request(self):
+        response = self.client.post(
+            self.url,
+            {
+                "items": [
+                    self.item(
+                        self.first_product,
+                        self.secondary_warehouse,
+                        1,
+                    )
+                ]
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("No inventory exists", response.json()["items"][0])
+        self.assertFalse(Order.objects.exists())
+
+    def test_response_includes_warehouse_and_existing_order_fields(self):
+        response = self.client.post(
+            self.url,
+            {
+                "items": [
+                    self.item(
+                        self.first_product,
+                        self.primary_warehouse,
+                        1,
+                    )
+                ]
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertSetEqual(
+            set(response.json()),
+            {
+                "id",
+                "user",
+                "status",
+                "created_at",
+                "updated_at",
+                "items",
+            },
+        )
+        item = response.json()["items"][0]
+        self.assertEqual(item["warehouse"]["id"], self.primary_warehouse.pk)
+        self.assertEqual(item["unit_price"], "12.50")
+
+class OrderStockConcurrencyTests(TransactionTestCase):
+    reset_sequences = True
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="concurrency-user"
+        )
+        self.product = Product.objects.create(
+            name="Concurrent Product",
+            sku="CONCURRENT-001",
+            price="10.00",
+        )
+        self.warehouse = Warehouse.objects.create(
+            name="Concurrent Warehouse",
+            location="Concurrent Location",
+        )
+        self.inventory = Inventory.objects.create(
+            product=self.product,
+            warehouse=self.warehouse,
+            quantity=10,
+        )
+
+    @skipUnlessDBFeature("has_select_for_update")
+    def test_concurrent_orders_cannot_oversell_locked_inventory(self):
+        barrier = Barrier(2, timeout=10)
+
+        def attempt_order():
+            close_old_connections()
+            try:
+                user = get_user_model().objects.get(pk=self.user.pk)
+                product = Product.objects.get(pk=self.product.pk)
+                warehouse = Warehouse.objects.get(pk=self.warehouse.pk)
+                barrier.wait()
+                create_order(
+                    user=user,
+                    items=[
+                        {
+                            "product": product,
+                            "warehouse": warehouse,
+                            "quantity": 8,
+                        }
+                    ],
+                )
+            except ValidationError:
+                return "rejected"
+            finally:
+                close_old_connections()
+            return "created"
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            results = list(executor.map(lambda _: attempt_order(), range(2)))
+        self.assertCountEqual(results, ("created", "rejected"))
+        self.inventory.refresh_from_db()
+        self.assertEqual(self.inventory.quantity, 2)
+        self.assertEqual(Order.objects.count(), 1)
+        self.assertEqual(OrderItem.objects.count(), 1)
 
 class InventoryRBACAPITests(APITestCase):
     @classmethod

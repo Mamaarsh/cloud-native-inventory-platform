@@ -1,4 +1,5 @@
 from django.db import DatabaseError, connection
+from django.db.models import Prefetch
 from drf_spectacular.utils import extend_schema
 from rest_framework import status, viewsets
 from rest_framework.decorators import action, api_view
@@ -10,7 +11,7 @@ from users.permissions import (
     ProductPermission,
     WarehousePermission,
 )
-from .models import Inventory, Order, Product, Warehouse
+from .models import Inventory, Order, OrderItem, Product, Warehouse
 from .serializers import (
     InventorySerializer,
     OrderCreateSerializer,
@@ -120,8 +121,13 @@ class OrderViewSet(viewsets.ModelViewSet):
     queryset = Order.objects.all().select_related(
         "user",
     ).prefetch_related(
-        "items",
-        "items__product",
+        Prefetch(
+            "items",
+            queryset=OrderItem.objects.select_related(
+                "product",
+                "warehouse",
+            ),
+        )
     )
     serializer_class = OrderSerializer
     permission_classes = (OrderPermission,)
@@ -159,6 +165,7 @@ class OrderViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         order = serializer.save()
+        order = self.get_queryset().get(pk=order.pk)
         response_serializer = OrderSerializer(
             order,
             context=self.get_serializer_context(),
@@ -188,6 +195,7 @@ class OrderViewSet(viewsets.ModelViewSet):
             order,
             input_serializer.validated_data["status"],
         )
+        order = self.get_queryset().get(pk=order.pk)
         response_serializer = OrderSerializer(
             order,
             context=self.get_serializer_context(),

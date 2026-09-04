@@ -80,6 +80,12 @@ class OrderItem(models.Model):
         on_delete=models.PROTECT,
         related_name="order_items",
     )
+    warehouse = models.ForeignKey(
+        Warehouse,
+        on_delete=models.PROTECT,
+        related_name="order_items",
+        null=True,
+    )
     quantity = models.PositiveIntegerField()
     unit_price = models.DecimalField(
         max_digits=12,
