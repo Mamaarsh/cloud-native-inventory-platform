@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Inventory, Order, OrderItem, Product, Warehouse
+from .models import Inventory, Order, OrderItem, Payment, Product, Warehouse
 
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
@@ -66,4 +66,25 @@ class OrderItemAdmin(admin.ModelAdmin):
         "warehouse",
         "quantity",
         "unit_price",
+    )
+
+@admin.register(Payment)
+class PaymentAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "order",
+        "amount",
+        "status",
+        "provider",
+        "provider_reference",
+        "created_at",
+    )
+    list_filter = (
+        "status",
+        "provider",
+    )
+    search_fields = (
+        "provider_reference",
+        "order__id",
+        "order__user__username",
     )

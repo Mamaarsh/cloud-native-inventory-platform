@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Inventory, Order, OrderItem, Product, Warehouse
+from .models import Inventory, Order, OrderItem, Payment, Product, Warehouse
 from .services import create_order
 
 class ProductSerializer(serializers.ModelSerializer):
@@ -126,3 +126,28 @@ class OrderCreateSerializer(serializers.Serializer):
 
 class OrderStatusUpdateSerializer(serializers.Serializer):
     status = serializers.ChoiceField(choices=Order.Status.choices)
+
+class PaymentRequestSerializer(serializers.Serializer):
+    def validate(self, attrs):
+        if self.initial_data:
+            errors = {
+                field: "This field is controlled by the server."
+                for field in self.initial_data
+            }
+            raise serializers.ValidationError(errors)
+        return attrs
+
+class PaymentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Payment
+        fields = (
+            "id",
+            "order",
+            "amount",
+            "status",
+            "provider",
+            "provider_reference",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = fields

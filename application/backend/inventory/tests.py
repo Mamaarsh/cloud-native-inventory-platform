@@ -11,8 +11,243 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.exceptions import ValidationError
 from rest_framework.test import APITestCase
-from .models import Inventory, Order, OrderItem, Product, Warehouse
-from .services import create_order
+from .models import Inventory, Order, OrderItem, Payment, Product, Warehouse
+from .services import create_order, process_payment
+from .services.payment_providers import PaymentProviderResult
+
+class PaymentAPITests(APITestCase):
+    @classmethod
+    def setUpTestData(cls):
+        admin_group = Group.objects.create(name="Admin")
+        cls.user = get_user_model().objects.create_user(
+            username="payment-admin"
+        )
+        cls.user.groups.add(admin_group)
+        cls.warehouse = Warehouse.objects.create(
+            name="Payment Warehouse",
+            location="Payment Location",
+        )
+        cls.first_product = Product.objects.create(
+            name="Payment Product A",
+            sku="PAY-001",
+            price="200.00",
+        )
+        cls.second_product = Product.objects.create(
+            name="Payment Product B",
+            sku="PAY-002",
+            price="20.00",
+        )
+
+    def setUp(self):
+        self.client.force_authenticate(self.user)
+
+    def create_order(self, status=Order.Status.PENDING, with_items=True):
+        order = Order.objects.create(user=self.user, status=status)
+        if with_items:
+            OrderItem.objects.create(
+                order=order,
+                product=self.first_product,
+                warehouse=self.warehouse,
+                quantity=2,
+                unit_price=Decimal("100.00"),
+            )
+            OrderItem.objects.create(
+                order=order,
+                product=self.second_product,
+                warehouse=self.warehouse,
+                quantity=3,
+                unit_price=Decimal("20.00"),
+            )
+        return order
+
+    def pay(self, order, data=None):
+        return self.client.post(
+            reverse("order-pay", args=(order.pk,)),
+            {} if data is None else data,
+            format="json",
+        )
+
+    def test_pending_order_can_be_paid_successfully(self):
+        order = self.create_order()
+        response = self.pay(order)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.json()["status"], Payment.Status.SUCCEEDED)
+
+    def test_successful_payment_creates_payment(self):
+        order = self.create_order()
+        response = self.pay(order)
+        payment = Payment.objects.get(order=order)
+        self.assertEqual(payment.pk, response.json()["id"])
+        self.assertEqual(payment.provider, "mock")
+        self.assertTrue(payment.provider_reference.startswith("mock_"))
+
+    def test_amount_uses_historical_order_item_prices(self):
+        order = self.create_order()
+        response = self.pay(order)
+        self.assertEqual(response.json()["amount"], "260.00")
+        self.assertEqual(order.payment.amount, Decimal("260.00"))
+
+    def test_product_price_change_does_not_change_payment_amount(self):
+        order = self.create_order()
+        self.first_product.price = Decimal("999.00")
+        self.first_product.save(update_fields=("price",))
+        response = self.pay(order)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.json()["amount"], "260.00")
+
+    def test_client_cannot_provide_amount(self):
+        order = self.create_order()
+        response = self.pay(order, {"amount": "1.00"})
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(Payment.objects.filter(order=order).exists())
+
+    def test_client_cannot_override_payment_status(self):
+        order = self.create_order()
+        response = self.pay(order, {"status": Payment.Status.REFUNDED})
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(Payment.objects.filter(order=order).exists())
+
+    def test_client_cannot_inject_provider_reference(self):
+        order = self.create_order()
+        response = self.pay(
+            order,
+            {"provider_reference": "client-controlled"},
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(Payment.objects.filter(order=order).exists())
+
+    def test_successful_payment_moves_pending_order_to_processing(self):
+        order = self.create_order()
+        self.pay(order)
+        order.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.PROCESSING)
+
+    @patch(
+        "inventory.services.payments.mock_payment_provider.charge",
+        return_value=PaymentProviderResult(
+            success=False,
+            provider_reference="mock_failed",
+        ),
+    )
+    def test_failed_payment_leaves_order_pending(self, mocked_charge):
+        order = self.create_order()
+        response = self.pay(order)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.json()["status"], Payment.Status.FAILED)
+        order.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.PENDING)
+        mocked_charge.assert_called_once()
+
+    def test_cancelled_order_cannot_be_paid(self):
+        order = self.create_order(status=Order.Status.CANCELLED)
+        response = self.pay(order)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(Payment.objects.filter(order=order).exists())
+
+    def test_delivered_order_cannot_be_paid(self):
+        order = self.create_order(status=Order.Status.DELIVERED)
+        response = self.pay(order)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(Payment.objects.filter(order=order).exists())
+
+    def test_empty_order_cannot_be_paid(self):
+        order = self.create_order(with_items=False)
+        response = self.pay(order)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(Payment.objects.filter(order=order).exists())
+
+    @patch(
+        "inventory.services.payments.mock_payment_provider.charge",
+        return_value=PaymentProviderResult(
+            success=True,
+            provider_reference="mock_idempotent",
+        ),
+    )
+    def test_repeated_payment_returns_existing_payment(self, mocked_charge):
+        order = self.create_order()
+        first_response = self.pay(order)
+        second_response = self.pay(order)
+        self.assertEqual(first_response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(second_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(first_response.json()["id"], second_response.json()["id"])
+        self.assertEqual(Payment.objects.filter(order=order).count(), 1)
+        mocked_charge.assert_called_once()
+
+    def test_payment_response_has_expected_fields(self):
+        order = self.create_order()
+        response = self.pay(order)
+        self.assertSetEqual(
+            set(response.json()),
+            {
+                "id",
+                "order",
+                "amount",
+                "status",
+                "provider",
+                "provider_reference",
+                "created_at",
+                "updated_at",
+            },
+        )
+
+class PaymentConcurrencyTests(TransactionTestCase):
+    reset_sequences = True
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="payment-concurrency-user"
+        )
+        product = Product.objects.create(
+            name="Payment Concurrency Product",
+            sku="PAY-CONCURRENT-001",
+            price="50.00",
+        )
+        warehouse = Warehouse.objects.create(
+            name="Payment Concurrency Warehouse",
+            location="Payment Concurrency Location",
+        )
+        self.order = Order.objects.create(user=self.user)
+        OrderItem.objects.create(
+            order=self.order,
+            product=product,
+            warehouse=warehouse,
+            quantity=2,
+            unit_price=Decimal("50.00"),
+        )
+
+    @skipUnlessDBFeature("has_select_for_update")
+    def test_concurrent_payment_attempts_create_one_payment(self):
+        barrier = Barrier(2, timeout=10)
+
+        def attempt_payment():
+            close_old_connections()
+            try:
+                order = Order.objects.get(pk=self.order.pk)
+                barrier.wait()
+                payment, created = process_payment(order)
+                return payment.pk, created
+            finally:
+                close_old_connections()
+        provider_result = PaymentProviderResult(
+            success=True,
+            provider_reference="mock_concurrent",
+        )
+        with patch(
+            "inventory.services.payments.mock_payment_provider.charge",
+            return_value=provider_result,
+        ) as mocked_charge:
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                results = list(
+                    executor.map(lambda _: attempt_payment(), range(2))
+                )
+        payment_ids = {payment_id for payment_id, _ in results}
+        created_flags = [created for _, created in results]
+        self.assertEqual(len(payment_ids), 1)
+        self.assertCountEqual(created_flags, (True, False))
+        self.assertEqual(Payment.objects.count(), 1)
+        mocked_charge.assert_called_once()
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.status, Order.Status.PROCESSING)
 
 class OrderStatusWorkflowAPITests(APITestCase):
     @classmethod

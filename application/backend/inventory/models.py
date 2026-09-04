@@ -94,3 +94,39 @@ class OrderItem(models.Model):
 
     def __str__(self):
         return f"{self.product} x {self.quantity}"
+
+class Payment(models.Model):
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        SUCCEEDED = "succeeded", "Succeeded"
+        FAILED = "failed", "Failed"
+        REFUNDED = "refunded", "Refunded"
+
+    order = models.OneToOneField(
+        Order,
+        on_delete=models.PROTECT,
+        related_name="payment",
+    )
+    amount = models.DecimalField(max_digits=24, decimal_places=2)
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.PENDING,
+    )
+    provider = models.CharField(max_length=50, default="mock")
+    provider_reference = models.CharField(
+        max_length=255,
+        unique=True,
+        null=True,
+        blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Payment for order #{self.order_id} - {self.status}"
+
+# Module-level aliases let drf-spectacular assign stable, distinct schema names
+# while preserving the established Order.Status and Payment.Status APIs.
+OrderStatus = Order.Status
+PaymentStatus = Payment.Status

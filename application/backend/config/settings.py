@@ -71,6 +71,10 @@ SPECTACULAR_SETTINGS = {
         'production-orented inventory and order management API'
     ),
     'VERSION': '1.0.0',
+    'ENUM_NAME_OVERRIDES': {
+        'OrderStatusEnum': 'inventory.models.OrderStatus',
+        'PaymentStatusEnum': 'inventory.models.PaymentStatus',
+    },
     'SECURITY': [
         {
             'BearerAuth': []

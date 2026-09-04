@@ -17,10 +17,12 @@ from .serializers import (
     OrderCreateSerializer,
     OrderSerializer,
     OrderStatusUpdateSerializer,
+    PaymentRequestSerializer,
+    PaymentSerializer,
     ProductSerializer,
     WarehouseSerializer,
 )
-from .services import transition_order_status
+from .services import process_payment, transition_order_status
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import OrderingFilter, SearchFilter
 
@@ -201,3 +203,27 @@ class OrderViewSet(viewsets.ModelViewSet):
             context=self.get_serializer_context(),
         )
         return Response(response_serializer.data)
+
+    @extend_schema(
+        description=(
+            "Process this order with the mock payment provider. Send an "
+            "empty JSON object; amount and all payment fields are controlled "
+            "by the server."
+        ),
+        request=PaymentRequestSerializer,
+        responses={
+            status.HTTP_200_OK: PaymentSerializer,
+            status.HTTP_201_CREATED: PaymentSerializer,
+        },
+    )
+    @action(detail=True, methods=("post",), url_path="pay")
+    def pay(self, request, *args, **kwargs):
+        input_serializer = PaymentRequestSerializer(data=request.data)
+        input_serializer.is_valid(raise_exception=True)
+        order = self.get_object()
+        payment, created = process_payment(order)
+        response_serializer = PaymentSerializer(payment)
+        response_status = (
+            status.HTTP_201_CREATED if created else status.HTTP_200_OK
+        )
+        return Response(response_serializer.data, status=response_status)
