@@ -21,12 +21,17 @@ from drf_spectacular.views import (
     SpectacularSwaggerView,
     SpectacularRedocView,
 )
-from inventory.views import health_live, health_ready
+from inventory.views import health_dependencies, health_live, health_ready
 
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/health/live/", health_live, name="health-live"),
     path("api/health/ready/", health_ready, name="health-ready"),
+    path(
+        "api/health/dependencies/",
+        health_dependencies,
+        name="health-dependencies",
+    ),
 
     path(
         "api/schema/",

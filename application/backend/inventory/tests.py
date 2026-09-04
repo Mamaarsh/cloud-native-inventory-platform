@@ -11,6 +11,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.exceptions import ValidationError
 from rest_framework.test import APITestCase
+from redis.exceptions import RedisError
 from .models import (
     Inventory,
     Notification,
@@ -967,16 +968,26 @@ class HealthCheckTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.json(), {"status": "ok"})
 
-    def test_readiness_returns_ready_when_database_is_available(self):
+    @patch(
+        "inventory.views.Redis.from_url",
+        side_effect=RedisError("Redis unavailable"),
+    )
+    def test_readiness_succeeds_when_database_is_available_even_if_redis_fails(
+        self,
+        mocked_from_url,
+    ):
         response = self.client.get(reverse("health-ready"))
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(
             response.json(),
             {
                 "status": "ready",
-                "database": "ok",
+                "checks": {
+                    "database": "ok",
+                },
             },
         )
+        mocked_from_url.assert_not_called()
 
     @patch(
         "inventory.views.connection.cursor",
@@ -995,7 +1006,80 @@ class HealthCheckTests(APITestCase):
             response.json(),
             {
                 "status": "not_ready",
-                "database": "unavailable",
+                "checks": {
+                    "database": "unavailable",
+                },
             },
         )
         mocked_cursor.assert_called_once_with()
+
+    @patch("inventory.views.Redis.from_url")
+    def test_dependencies_endpoint_returns_healthy(
+        self,
+        mocked_from_url,
+    ):
+        redis_client = mocked_from_url.return_value
+        response = self.client.get(reverse("health-dependencies"))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response.json(),
+            {
+                "status": "healthy",
+                "checks": {
+                    "database": "ok",
+                    "redis": "ok",
+                },
+            },
+        )
+        redis_client.ping.assert_called_once_with()
+        redis_client.close.assert_called_once_with()
+
+    @patch(
+        "inventory.views.Redis.from_url",
+        side_effect=RedisError("Redis unavailable"),
+    )
+    def test_dependencies_endpoint_reports_degraded_when_redis_fails(
+        self,
+        mocked_from_url,
+    ):
+        response = self.client.get(reverse("health-dependencies"))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response.json(),
+            {
+                "status": "degraded",
+                "checks": {
+                    "database": "ok",
+                    "redis": "unavailable",
+                },
+            },
+        )
+        mocked_from_url.assert_called_once()
+
+    @patch("inventory.views.Redis.from_url")
+    @patch(
+        "inventory.views.connection.cursor",
+        side_effect=OperationalError("Database unavailable"),
+    )
+    def test_dependencies_endpoint_reports_unhealthy_when_database_fails(
+        self,
+        mocked_cursor,
+        mocked_from_url,
+    ):
+        response = self.client.get(reverse("health-dependencies"))
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+        self.assertEqual(
+            response.json(),
+            {
+                "status": "unhealthy",
+                "checks": {
+                    "database": "unavailable",
+                    "redis": "ok",
+                },
+            },
+        )
+        mocked_cursor.assert_called_once_with()
+        mocked_from_url.return_value.ping.assert_called_once_with()
