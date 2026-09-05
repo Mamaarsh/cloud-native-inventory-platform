@@ -1,0 +1,61 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --color-brand-50: #eef7ff;
+  --color-brand-100: #d8edff;
+  --color-brand-500: #1685f8;
+  --color-brand-600: #0872dd;
+  --color-brand-700: #095bb2;
+  --color-ink-950: #07111f;
+  --shadow-soft: 0 18px 50px -28px rgb(15 23 42 / 0.32);
+}
+
+:root {
+  font-family: var(--font-sans);
+  color: #172033;
+  background: #f4f7fb;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 3px solid rgb(22 133 248 / 0.25);
+  outline-offset: 2px;
+}
+
+.dashboard-grid {
+  background-image:
+    linear-gradient(rgb(255 255 255 / 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(255 255 255 / 0.03) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+.table-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
