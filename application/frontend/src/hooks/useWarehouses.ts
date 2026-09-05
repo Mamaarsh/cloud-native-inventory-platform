@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createWarehouse,
   deleteWarehouse,
@@ -20,6 +20,7 @@ export function useWarehouses(params: WarehouseQueryParams = {}) {
   return useQuery({
     queryKey: warehouseKeys.list(params),
     queryFn: () => listWarehouses(params),
+    placeholderData: keepPreviousData,
   });
 }
 

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Boxes, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { RoleGuard } from "@/auth/RoleGuard";
 import { InventoryForm } from "@/components/inventory/InventoryForm";
+import { BackgroundFetchIndicator } from "@/components/ui/BackgroundFetchIndicator";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -11,12 +12,16 @@ import { Modal } from "@/components/ui/Modal";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Pagination } from "@/components/ui/Pagination";
 import { Select } from "@/components/ui/Select";
+import { Spinner } from "@/components/ui/Spinner";
 import {
   useCreateInventory,
   useDeleteInventory,
   useInventory,
   useUpdateInventory,
 } from "@/hooks/useInventory";
+import { useAuth } from "@/hooks/useAuth";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { useSuccessFeedback } from "@/hooks/useSuccessFeedback";
 import { useAllProducts } from "@/hooks/useProducts";
 import { useAllWarehouses } from "@/hooks/useWarehouses";
 import { formatDate } from "@/lib/format";
@@ -34,10 +39,11 @@ export function InventoryPage() {
   const [editing, setEditing] = useState<Inventory | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [deleting, setDeleting] = useState<Inventory | null>(null);
+  const debouncedSearch = useDebouncedValue(search);
 
   const inventory = useInventory({
     page,
-    search: search || undefined,
+    search: debouncedSearch || undefined,
     product,
     warehouse,
     ordering: "quantity",
@@ -47,10 +53,20 @@ export function InventoryPage() {
   const createMutation = useCreateInventory();
   const updateMutation = useUpdateInventory();
   const deleteMutation = useDeleteInventory();
+  const { hasRole } = useAuth();
+  const { showSuccess } = useSuccessFeedback();
 
   const productMap = new Map(products.data?.map((item) => [item.id, item]));
   const warehouseMap = new Map(warehouses.data?.map((item) => [item.id, item]));
-  const hasFilters = Boolean(search || product || warehouse);
+  const hasFilters = Boolean(debouncedSearch || product || warehouse);
+  const canCreateInventory = hasRole(inventoryCreators);
+
+  function clearFilters(): void {
+    setSearch("");
+    setProduct(undefined);
+    setWarehouse(undefined);
+    setPage(1);
+  }
 
   function openForm(item?: Inventory): void {
     createMutation.reset();
@@ -74,8 +90,10 @@ export function InventoryPage() {
   async function saveInventory(payload: InventoryRequest): Promise<void> {
     if (editing) {
       await updateMutation.mutateAsync({ id: editing.id, payload });
+      showSuccess("Inventory record updated successfully.");
     } else {
       await createMutation.mutateAsync(payload);
+      showSuccess("Inventory record created successfully.");
     }
     closeForm();
   }
@@ -85,6 +103,7 @@ export function InventoryPage() {
     try {
       await deleteMutation.mutateAsync(deleting.id);
       setDeleting(null);
+      showSuccess("Inventory record deleted.");
     } catch {
       // The mutation error remains visible in the confirmation modal.
     }
@@ -105,11 +124,12 @@ export function InventoryPage() {
         }
       />
 
-      <Card>
+      <Card aria-busy={inventory.isPending}>
         <div className="grid gap-4 border-b border-slate-200 p-5 md:grid-cols-3">
           <div className="relative self-end">
             <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
             <input
+              dir="auto"
               value={search}
               onChange={(event) => {
                 setSearch(event.target.value);
@@ -123,6 +143,7 @@ export function InventoryPage() {
 
           <Select
             label="Product"
+            dir="auto"
             value={product ?? ""}
             onChange={(event) => {
               setProduct(event.target.value ? Number(event.target.value) : undefined);
@@ -139,6 +160,7 @@ export function InventoryPage() {
 
           <Select
             label="Warehouse"
+            dir="auto"
             value={warehouse ?? ""}
             onChange={(event) => {
               setWarehouse(event.target.value ? Number(event.target.value) : undefined);
@@ -154,8 +176,10 @@ export function InventoryPage() {
           </Select>
         </div>
 
+        <BackgroundFetchIndicator active={inventory.isFetching && !inventory.isPending} label="Updating inventory" />
+
         {inventory.isPending ? (
-          <div className="p-8 text-sm text-slate-500">Loading inventory…</div>
+          <Spinner label="Loading inventory" />
         ) : null}
         {inventory.isError ? (
           <div className="p-5">
@@ -169,16 +193,20 @@ export function InventoryPage() {
             description={
               hasFilters
                 ? "Adjust the search, product, or warehouse filters."
-                : "Add the first stock record to start tracking warehouse quantities."
+                : canCreateInventory
+                  ? "Add the first stock record to start tracking warehouse quantities."
+                  : "No inventory records are currently configured."
             }
             action={
-              hasFilters ? undefined : (
-                <RoleGuard role={inventoryCreators}>
-                  <Button onClick={() => openForm()}>
-                    <Plus className="size-4" /> Add inventory
-                  </Button>
-                </RoleGuard>
-              )
+              hasFilters ? (
+                <Button variant="outline" size="sm" onClick={clearFilters}>
+                  Clear filters
+                </Button>
+              ) : canCreateInventory ? (
+                <Button size="sm" onClick={() => openForm()}>
+                  <Plus className="size-4" /> Add inventory
+                </Button>
+              ) : undefined
             }
           />
         ) : null}
@@ -189,12 +217,12 @@ export function InventoryPage() {
               <table className="w-full min-w-[820px] text-left">
                 <thead className="bg-slate-50/80 text-xs font-bold uppercase tracking-wider text-slate-500">
                   <tr>
-                    <th className="px-6 py-4">Product</th>
-                    <th className="px-6 py-4">Warehouse</th>
-                    <th className="px-6 py-4">Quantity</th>
-                    <th className="px-6 py-4">Signal</th>
-                    <th className="px-6 py-4">Last updated</th>
-                    <th className="px-6 py-4 text-right">Actions</th>
+                    <th scope="col" className="px-6 py-4">Product</th>
+                    <th scope="col" className="px-6 py-4">Warehouse</th>
+                    <th scope="col" className="px-6 py-4 text-right">Quantity</th>
+                    <th scope="col" className="px-6 py-4">Signal</th>
+                    <th scope="col" className="px-6 py-4">Last updated</th>
+                    <th scope="col" className="px-6 py-4 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -205,22 +233,22 @@ export function InventoryPage() {
                     return (
                       <tr key={item.id} className="hover:bg-slate-50/70">
                         <td className="px-6 py-4">
-                          <p className="font-semibold text-slate-900">
+                          <p dir="auto" className="font-semibold text-slate-900">
                             {productRecord?.name ?? `Product #${item.product}`}
                           </p>
-                          <p className="mt-0.5 font-mono text-xs text-slate-400">
+                          <p className="mt-0.5 font-mono text-xs text-slate-500">
                             {productRecord?.sku ?? "Details unavailable"}
                           </p>
                         </td>
                         <td className="px-6 py-4">
-                          <p className="text-sm font-medium text-slate-800">
+                          <p dir="auto" className="text-sm font-medium text-slate-800">
                             {warehouseRecord?.name ?? `Warehouse #${item.warehouse}`}
                           </p>
-                          <p className="mt-0.5 text-xs text-slate-400">
+                          <p dir="auto" className="mt-0.5 text-xs text-slate-500">
                             {warehouseRecord?.location}
                           </p>
                         </td>
-                        <td className="px-6 py-4 text-xl font-bold text-slate-950">
+                        <td className="px-6 py-4 text-right text-xl font-bold tabular-nums text-slate-950">
                           {item.quantity.toLocaleString()}
                         </td>
                         <td className="px-6 py-4">
@@ -243,20 +271,20 @@ export function InventoryPage() {
                               <button
                                 type="button"
                                 onClick={() => openForm(item)}
-                                className="rounded-lg p-2 text-slate-500 hover:bg-brand-50 hover:text-brand-700"
+                                className="grid size-10 place-items-center rounded-lg text-slate-500 hover:bg-brand-50 hover:text-brand-700"
                                 aria-label={`Edit inventory for ${productRecord?.name ?? `product ${item.product}`}`}
                               >
-                                <Pencil className="size-4" />
+                                <Pencil className="size-4" aria-hidden="true" />
                               </button>
                             </RoleGuard>
                             <RoleGuard role={ROLES.admin}>
                               <button
                                 type="button"
                                 onClick={() => setDeleting(item)}
-                                className="rounded-lg p-2 text-slate-500 hover:bg-rose-50 hover:text-rose-700"
+                                className="grid size-10 place-items-center rounded-lg text-slate-500 hover:bg-rose-50 hover:text-rose-700"
                                 aria-label={`Delete inventory for ${productRecord?.name ?? `product ${item.product}`}`}
                               >
-                                <Trash2 className="size-4" />
+                                <Trash2 className="size-4" aria-hidden="true" />
                               </button>
                             </RoleGuard>
                           </div>
@@ -302,6 +330,7 @@ export function InventoryPage() {
         title="Delete inventory"
         description="This removes the stock record from the warehouse."
         size="sm"
+        isBusy={deleteMutation.isPending}
       >
         {deleteMutation.isError ? (
           <div className="mb-4">
@@ -325,6 +354,7 @@ export function InventoryPage() {
             Cancel
           </Button>
           <Button
+            data-modal-destructive="true"
             variant="danger"
             isLoading={deleteMutation.isPending}
             onClick={() => void confirmDelete()}

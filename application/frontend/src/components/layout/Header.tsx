@@ -1,9 +1,11 @@
-import { LogOut, Menu } from "lucide-react";
+import { Menu } from "lucide-react";
 import { useLocation } from "react-router-dom";
-import { useAuth } from "@/hooks/useAuth";
+import { AccountMenu } from "@/components/account/AccountMenu";
+import { MOBILE_SIDEBAR_ID } from "@/components/layout/Sidebar";
 
 interface HeaderProps {
-  onOpenMenu: () => void;
+  menuOpen: boolean;
+  onToggleMenu: () => void;
 }
 
 const titles: Record<string, string> = {
@@ -12,36 +14,32 @@ const titles: Record<string, string> = {
   "/warehouses": "Warehouses",
   "/inventory": "Inventory",
   "/orders": "Orders",
+  "/account": "My account",
 };
 
-export function Header({ onOpenMenu }: HeaderProps) {
-  const { currentUser, logout } = useAuth();
+export function Header({ menuOpen, onToggleMenu }: HeaderProps) {
   const location = useLocation();
   const title = location.pathname.startsWith("/orders/") ? "Order details" : (titles[location.pathname] ?? "Inventory platform");
-  const displayName = [currentUser?.first_name, currentUser?.last_name].filter(Boolean).join(" ") || currentUser?.username;
-  const initials = displayName?.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase() || "U";
 
   return (
-    <header className="sticky top-0 z-20 flex h-20 items-center justify-between border-b border-slate-200/80 bg-white/90 px-4 backdrop-blur-xl sm:px-6 lg:px-8">
-      <div className="flex items-center gap-3">
-        <button type="button" onClick={onOpenMenu} className="rounded-xl border border-slate-200 p-2.5 text-slate-600 hover:bg-slate-50 lg:hidden" aria-label="Open menu">
+    <header className="sticky top-0 z-20 flex h-20 items-center justify-between border-b border-slate-200 bg-white px-4 shadow-[0_1px_3px_rgb(15_23_42/0.04)] sm:px-6 lg:px-8">
+      <div className="flex min-w-0 items-center gap-3.5">
+        <button
+          type="button"
+          onClick={onToggleMenu}
+          aria-expanded={menuOpen}
+          aria-controls={MOBILE_SIDEBAR_ID}
+          aria-label={menuOpen ? "Close navigation" : "Open navigation"}
+          className="grid size-10 shrink-0 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 motion-reduce:transition-none lg:hidden"
+        >
           <Menu className="size-5" />
         </button>
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.13em] text-brand-600">Workspace</p>
-          <h1 className="mt-0.5 text-lg font-bold tracking-tight text-slate-950 sm:text-xl">{title}</h1>
+        <div className="min-w-0">
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-brand-600">Workspace</p>
+          <h1 className="mt-1 truncate text-lg font-bold tracking-tight text-slate-950 sm:text-xl">{title}</h1>
         </div>
       </div>
-      <div className="flex items-center gap-3">
-        <div className="hidden text-right sm:block">
-          <p className="text-sm font-semibold text-slate-900">{displayName}</p>
-          <p className="max-w-48 truncate text-xs text-slate-500">{currentUser?.groups.join(" · ") || "Authenticated user"}</p>
-        </div>
-        <span className="grid size-10 place-items-center rounded-xl bg-slate-900 text-xs font-bold text-white">{initials}</span>
-        <button type="button" onClick={logout} className="rounded-xl p-2.5 text-slate-500 hover:bg-rose-50 hover:text-rose-600" aria-label="Log out" title="Log out">
-          <LogOut className="size-5" />
-        </button>
-      </div>
+      <AccountMenu />
     </header>
   );
 }

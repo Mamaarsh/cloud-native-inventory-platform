@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/Button";
 import { ErrorMessage } from "@/components/ui/ErrorMessage";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
+import { Spinner } from "@/components/ui/Spinner";
 import { useAllProducts } from "@/hooks/useProducts";
 import { useAllWarehouses } from "@/hooks/useWarehouses";
 import type { Inventory, InventoryRequest } from "@/types";
@@ -61,7 +62,7 @@ export function InventoryForm({
   }
 
   if (products.isPending || warehouses.isPending) {
-    return <p className="py-8 text-center text-sm text-slate-500">Loading products and warehouses…</p>;
+    return <Spinner label="Loading products and warehouses" />;
   }
 
   if (products.isError || warehouses.isError) {
@@ -81,6 +82,7 @@ export function InventoryForm({
 
       <Select
         label="Product"
+        dir="auto"
         value={form.product || ""}
         onChange={(event) => {
           setForm({ ...form, product: Number(event.target.value) });
@@ -100,6 +102,7 @@ export function InventoryForm({
 
       <Select
         label="Warehouse"
+        dir="auto"
         value={form.warehouse || ""}
         onChange={(event) => {
           setForm({ ...form, warehouse: Number(event.target.value) });

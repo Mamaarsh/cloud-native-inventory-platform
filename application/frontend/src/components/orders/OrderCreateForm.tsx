@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/Button";
 import { ErrorMessage } from "@/components/ui/ErrorMessage";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
+import { Spinner } from "@/components/ui/Spinner";
 import { useAllProducts } from "@/hooks/useProducts";
 import { useAllWarehouses } from "@/hooks/useWarehouses";
 import type { OrderCreateRequest, OrderItemCreateRequest } from "@/types";
@@ -44,7 +45,7 @@ export function OrderCreateForm({ onSubmit, onCancel, isSubmitting, serverError 
   }
 
   if (products.isPending || warehouses.isPending) {
-    return <p className="py-8 text-center text-sm text-slate-500">Loading order options…</p>;
+    return <Spinner label="Loading order options" />;
   }
 
   if (products.isError || warehouses.isError) {
@@ -58,10 +59,10 @@ export function OrderCreateForm({ onSubmit, onCancel, isSubmitting, serverError 
       <div className="space-y-4">
         {items.map((item, index) => (
           <div key={index} className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
-            <div className="mb-4 flex items-center justify-between"><p className="text-sm font-bold text-slate-800">Item {index + 1}</p>{items.length > 1 ? <button type="button" onClick={() => setItems((current) => current.filter((_, itemIndex) => itemIndex !== index))} className="rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600" aria-label={`Remove item ${index + 1}`}><Trash2 className="size-4" /></button> : null}</div>
+            <div className="mb-4 flex items-center justify-between"><p className="text-sm font-bold text-slate-800">Item {index + 1}</p>{items.length > 1 ? <button type="button" onClick={() => setItems((current) => current.filter((_, itemIndex) => itemIndex !== index))} className="grid size-10 place-items-center rounded-lg text-slate-500 hover:bg-rose-50 hover:text-rose-700" aria-label={`Remove item ${index + 1}`}><Trash2 className="size-4" aria-hidden="true" /></button> : null}</div>
             <div className="grid gap-4 md:grid-cols-[1.3fr_1.3fr_0.6fr]">
-              <Select label="Product" value={item.product || ""} onChange={(event) => updateItem(index, { product: Number(event.target.value) })} required><option value="">Choose product</option>{activeProducts.map((product) => <option key={product.id} value={product.id}>{product.name} · {product.sku}</option>)}</Select>
-              <Select label="Warehouse" value={item.warehouse || ""} onChange={(event) => updateItem(index, { warehouse: Number(event.target.value) })} required><option value="">Choose warehouse</option>{warehouses.data?.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</Select>
+              <Select label="Product" dir="auto" value={item.product || ""} onChange={(event) => updateItem(index, { product: Number(event.target.value) })} required><option value="">Choose product</option>{activeProducts.map((product) => <option key={product.id} value={product.id}>{product.name} · {product.sku}</option>)}</Select>
+              <Select label="Warehouse" dir="auto" value={item.warehouse || ""} onChange={(event) => updateItem(index, { warehouse: Number(event.target.value) })} required><option value="">Choose warehouse</option>{warehouses.data?.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</Select>
               <Input label="Quantity" type="number" min="1" step="1" value={item.quantity} onChange={(event) => updateItem(index, { quantity: Number(event.target.value) })} required />
             </div>
           </div>

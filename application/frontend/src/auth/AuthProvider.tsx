@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { getCurrentUser, requestTokens } from "@/api/auth-api";
+import { getCurrentUser, requestTokens, updateCurrentUserProfile } from "@/api/auth-api";
 import { AUTH_LOGOUT_EVENT } from "@/api/client";
 import { AuthContext, type AuthProviderProps } from "@/auth/AuthContext";
 import { tokenStorage } from "@/auth/token-storage";
-import type { Role, TokenRequest, User } from "@/types";
+import type { Role, TokenRequest, User, UserProfileUpdateRequest } from "@/types";
 
 export function AuthProvider({ children }: AuthProviderProps) {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -56,6 +56,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }, []);
 
+  const updateProfile = useCallback(async (profile: UserProfileUpdateRequest) => {
+    const updatedUser = await updateCurrentUserProfile(profile);
+    setCurrentUser(updatedUser);
+    return updatedUser;
+  }, []);
+
   const hasRole = useCallback(
     (required: Role | Role[]) => {
       const roles = Array.isArray(required) ? required : [required];
@@ -70,10 +76,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
       isAuthenticated: currentUser !== null,
       isLoading,
       login,
+      updateProfile,
       logout,
       hasRole,
     }),
-    [currentUser, hasRole, isLoading, login, logout],
+    [currentUser, hasRole, isLoading, login, logout, updateProfile],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

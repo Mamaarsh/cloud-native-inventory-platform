@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createInventory,
   deleteInventory,
@@ -17,6 +17,7 @@ export function useInventory(params: InventoryQueryParams = {}) {
   return useQuery({
     queryKey: inventoryKeys.list(params),
     queryFn: () => listInventory(params),
+    placeholderData: keepPreviousData,
   });
 }
 

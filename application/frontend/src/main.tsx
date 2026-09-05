@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import axios from "axios";
 import App from "@/App";
 import { AuthProvider } from "@/auth/AuthProvider";
+import { SuccessFeedbackProvider } from "@/feedback/SuccessFeedbackProvider";
 import "@/index.css";
 
 const queryClient = new QueryClient({
@@ -27,11 +28,13 @@ if (!rootElement) throw new Error("Application root element was not found.");
 createRoot(rootElement).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <AuthProvider>
-          <App />
-        </AuthProvider>
-      </BrowserRouter>
+      <SuccessFeedbackProvider>
+        <BrowserRouter>
+          <AuthProvider>
+            <App />
+          </AuthProvider>
+        </BrowserRouter>
+      </SuccessFeedbackProvider>
     </QueryClientProvider>
   </StrictMode>,
 );

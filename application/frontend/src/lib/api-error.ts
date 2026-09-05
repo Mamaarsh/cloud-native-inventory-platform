@@ -40,3 +40,25 @@ export function getApiErrorMessage(error: unknown): string {
         : "Unable to reach the service. Check your connection and try again.";
   }
 }
+
+function collectMessages(value: unknown): string[] {
+  if (typeof value === "string") return [value];
+  if (Array.isArray(value)) return value.flatMap(collectMessages);
+  return [];
+}
+
+export function getApiFieldErrors<Field extends string>(
+  error: unknown,
+  fields: readonly Field[],
+): Partial<Record<Field, string>> {
+  if (!axios.isAxiosError(error) || !error.response?.data) return {};
+  if (typeof error.response.data !== "object" || Array.isArray(error.response.data)) return {};
+
+  const responseData = error.response.data as Record<string, unknown>;
+  const fieldErrors: Partial<Record<Field, string>> = {};
+  for (const field of fields) {
+    const messages = collectMessages(responseData[field]);
+    if (messages.length > 0) fieldErrors[field] = messages.join(" ");
+  }
+  return fieldErrors;
+}

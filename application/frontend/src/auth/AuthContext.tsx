@@ -1,12 +1,13 @@
 import { createContext } from "react";
 import type { ReactNode } from "react";
-import type { Role, TokenRequest, User } from "@/types";
+import type { Role, TokenRequest, User, UserProfileUpdateRequest } from "@/types";
 
 export interface AuthContextValue {
   currentUser: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (credentials: TokenRequest) => Promise<void>;
+  updateProfile: (profile: UserProfileUpdateRequest) => Promise<User>;
   logout: () => void;
   hasRole: (role: Role | Role[]) => boolean;
 }

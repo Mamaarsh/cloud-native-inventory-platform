@@ -1,6 +1,7 @@
 import { Route, Routes } from "react-router-dom";
 import { ProtectedRoute } from "@/auth/ProtectedRoute";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { AccountPage } from "@/pages/AccountPage";
 import { DashboardPage } from "@/pages/DashboardPage";
 import { InventoryPage } from "@/pages/InventoryPage";
 import { LoginPage } from "@/pages/LoginPage";
@@ -17,6 +18,7 @@ export function AppRoutes() {
       <Route element={<ProtectedRoute />}>
         <Route element={<AppLayout />}>
           <Route index element={<DashboardPage />} />
+          <Route path="account" element={<AccountPage />} />
           <Route path="products" element={<ProductsPage />} />
           <Route path="warehouses" element={<WarehousesPage />} />
           <Route path="inventory" element={<InventoryPage />} />

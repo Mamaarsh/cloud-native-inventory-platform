@@ -16,6 +16,22 @@ export interface User {
   is_staff: boolean;
 }
 
+export interface UserProfileUpdateRequest {
+  first_name: string;
+  last_name: string;
+  email: string;
+}
+
+export interface PasswordChangeRequest {
+  current_password: string;
+  new_password: string;
+  new_password_confirm: string;
+}
+
+export interface PasswordChangeResponse {
+  detail: string;
+}
+
 export interface OrderUser {
   id: number;
   username: string;

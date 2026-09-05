@@ -36,7 +36,7 @@ export function ProductForm({ product, onSubmit, onCancel, isSubmitting, serverE
     <form onSubmit={(event) => void handleSubmit(event)} className="space-y-5">
       {serverError ? <p className="rounded-xl bg-rose-50 p-3 text-sm text-rose-700" role="alert">{getApiErrorMessage(serverError)}</p> : null}
       <div className="grid gap-4 sm:grid-cols-2">
-        <Input label="Product name" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} error={errors.name} autoFocus />
+        <Input label="Product name" dir="auto" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} error={errors.name} autoFocus />
         <Input label="SKU" value={form.sku} onChange={(event) => setForm({ ...form, sku: event.target.value })} error={errors.sku} placeholder="SKU-001" />
       </div>
       <Input label="Unit price" type="number" min="0" step="0.01" value={form.price} onChange={(event) => setForm({ ...form, price: event.target.value })} error={errors.price} />

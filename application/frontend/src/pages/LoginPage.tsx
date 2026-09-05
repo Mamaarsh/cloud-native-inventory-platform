@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { ArrowRight, Boxes, LockKeyhole, ShieldCheck } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ArrowRight, Boxes, CheckCircle2, LockKeyhole, ShieldCheck } from "lucide-react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -8,6 +8,7 @@ import { getApiErrorMessage } from "@/lib/api-error";
 
 interface LocationState {
   from?: { pathname?: string };
+  successMessage?: string;
 }
 
 export function LoginPage() {
@@ -18,6 +19,14 @@ export function LoginPage() {
   const { login, isAuthenticated, isLoading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const locationState = location.state as LocationState | null;
+  const [successMessage, setSuccessMessage] = useState(locationState?.successMessage ?? null);
+
+  useEffect(() => {
+    if (!successMessage) return undefined;
+    const timeoutId = window.setTimeout(() => setSuccessMessage(null), 6_000);
+    return () => window.clearTimeout(timeoutId);
+  }, [successMessage]);
 
   if (!isLoading && isAuthenticated) return <Navigate to="/" replace />;
 
@@ -31,8 +40,7 @@ export function LoginPage() {
     setError(null);
     try {
       await login({ username: username.trim(), password });
-      const state = location.state as LocationState | null;
-      void navigate(state?.from?.pathname ?? "/", { replace: true });
+      void navigate(locationState?.from?.pathname ?? "/", { replace: true });
     } catch (loginError: unknown) {
       setError(getApiErrorMessage(loginError));
     } finally {
@@ -65,6 +73,12 @@ export function LoginPage() {
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-600">Secure workspace</p>
           <h2 className="mt-3 text-3xl font-bold tracking-tight text-slate-950">Welcome back</h2>
           <p className="mt-3 text-sm leading-6 text-slate-500">Sign in with your inventory platform credentials.</p>
+          {successMessage ? (
+            <div className="mt-6 flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700" role="status">
+              <CheckCircle2 className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+              {successMessage}
+            </div>
+          ) : null}
           <form onSubmit={(event) => void handleSubmit(event)} className="mt-8 space-y-5">
             {error ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700" role="alert">{error}</div> : null}
             <Input label="Username" value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" autoFocus placeholder="Enter your username" />
