@@ -2,14 +2,21 @@
 __pycache__/
 *.py[cod]
 *.pyo
+*.pyd
+*.so
 
 # Virtual Environment
 .venv/
 venv/
+env/
+ENV/
 
 # Django
 db.sqlite3
+db.sqlite3-journal
 *.log
+staticfiles/
+media/
 
 # Environment variables
 .env
@@ -22,8 +29,11 @@ db.sqlite3
 
 # OS
 .DS_Store
+Thumbs.db
 
 # Test / cache
 .pytest_cache/
 .coverage
 htmlcov/
+.mypy_cache/
+.ruff_cache/
