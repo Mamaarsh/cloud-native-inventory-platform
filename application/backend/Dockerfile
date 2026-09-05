@@ -42,6 +42,10 @@ RUN python -m pip install \
 
 COPY --chown=appuser:appgroup . .
 
+RUN mkdir -p /app/staticfiles \
+    && chown -R appuser:appgroup /app/staticfiles \
+    && chmod +x /app/entrypoint.sh
+
 USER appuser
 
 EXPOSE 8000
@@ -49,5 +53,7 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s \
     --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health/live/', timeout=3)"
+
+ENTRYPOINT ["/app/entrypoint.sh"]
 
 CMD ["gunicorn", "config.wsgi:application", "--config", "gunicorn.conf.py"]
