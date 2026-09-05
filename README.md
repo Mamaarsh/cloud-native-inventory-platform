@@ -2,7 +2,7 @@
 
 # Cloud Native Inventory Platform
 
-**Inventory and order operations built with Django REST Framework and React.**
+**A DevOps-focused full-stack and cloud-native portfolio project.**
 
 ![Python](https://img.shields.io/badge/Python-3.14-3776AB?logo=python&logoColor=white)
 ![Django](https://img.shields.io/badge/Django-5.2-092E20?logo=django&logoColor=white)
@@ -12,9 +12,9 @@
 
 </div>
 
-A production-oriented platform for managing products, warehouses, stock, orders, payments, and notifications through a secured REST API and responsive operations dashboard.
+A DevOps-focused project that uses a real Django, React, and PostgreSQL inventory platform as the workload for a complete software delivery lifecycle.
 
-The repository currently provides the full application and a containerized local foundation. Broader deployment, delivery, and observability infrastructure remains on the roadmap.
+Its primary engineering objective is to evolve that workload through containerization, CI/CD, Kubernetes, observability, centralized logging, resilience, and production operations.
 
 ## Features
 
@@ -22,30 +22,44 @@ The repository currently provides the full application and a containerized local
 - Product, warehouse, and inventory management
 - Transactional order creation with historical price snapshots
 - Controlled order status workflow and payment processing
-- Redis-backed asynchronous notification support
-- OpenAPI documentation and dependency-aware health checks
+- Notification service foundation and OpenAPI documentation
 
 ## Technology
 
 **Backend:** Python · Django · Django REST Framework · PostgreSQL · SimpleJWT<br>
 **Frontend:** React · TypeScript · Vite · Tailwind CSS · TanStack Query<br>
-**Runtime:** Docker Compose · Gunicorn · Redis
+**Operations:** Docker Compose · Gunicorn · Redis · Celery (worker planned)
 
-## Project Status
+## DevOps Status
 
-**Implemented:** Full-stack application, PostgreSQL, Dockerized backend, Redis integration, health checks, and application logging.
+### Implemented
 
-**Planned:** CI/CD, Kubernetes, Helm, Prometheus, Grafana, and centralized logging infrastructure.
+- Production-oriented Dockerfile and Gunicorn runtime
+- Docker Compose with PostgreSQL persistence and Redis integration
+- Environment-based configuration, health checks, and application logging
+
+### Next Stages
+
+- Celery worker integration, CI/CD pipeline, and image registry
+- Kubernetes, Helm, Prometheus/Grafana, and centralized logging
+- Backup, recovery, and resilience validation
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    UI[React + Vite] -->|JWT / REST| API[Django REST Framework]
+    UI[React + Vite] -->|JWT / REST| API[Django + Gunicorn]
     API --> DB[(PostgreSQL)]
     API --> Redis[(Redis)]
-    Redis -.-> Worker[Celery Worker - next infrastructure step]
+
+    Repo[Git repository] -. planned .-> CI[CI/CD]
+    CI -.-> Registry[Image registry]
+    Registry -.-> K8s[Kubernetes + Helm]
+    K8s -.-> Obs[Metrics, logs, recovery]
+    Redis -. planned .-> Worker[Celery worker]
 ```
+
+Solid lines show the current application path; dashed lines show the planned cloud-native delivery path.
 
 ## Quick Start
 
@@ -86,12 +100,12 @@ docker compose exec backend python manage.py test
 cd application/frontend && npm run lint && npm run build
 ```
 
-## Roadmap
+## DevOps Roadmap
 
-- CI/CD pipeline and container registry
-- Kubernetes deployment with Helm
-- Prometheus and Grafana observability
-- Centralized logging and recovery procedures
+- Integrate and operate Celery workers
+- Build CI/CD and publish versioned images
+- Deploy to Kubernetes with Helm
+- Add observability, centralized logging, and recovery procedures
 
 ## Development Assistance
 
