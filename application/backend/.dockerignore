@@ -4,16 +4,12 @@
 
 __pycache__/
 *.py[cod]
-*$py.class
-
-# Python build artifacts
-build/
-dist/
-*.egg-info/
-.eggs/
+*.pyo
+*.pyd
+*.so
 
 # =========================
-# Virtual Environments
+# Virtual Environment
 # =========================
 
 .venv/
@@ -25,41 +21,26 @@ ENV/
 # Django
 # =========================
 
-*.log
-
-# Local database
 db.sqlite3
 db.sqlite3-journal
-
-# Django static/media generated files
+*.log
 staticfiles/
 static/
 media/
 
 # =========================
-# Environment Variables
+# Environment
 # =========================
 
 .env
 .env.*
-!.env.example
 
 # =========================
-# Testing
+# Git
 # =========================
 
-.pytest_cache/
-.coverage
-htmlcov/
-.tox/
-.nox/
-
-# =========================
-# Django / Python cache
-# =========================
-
-.mypy_cache/
-.ruff_cache/
+.git/
+.gitignore
 
 # =========================
 # IDE
@@ -67,8 +48,6 @@ htmlcov/
 
 .vscode/
 .idea/
-*.swp
-*.swo
 
 # =========================
 # OS
@@ -78,35 +57,11 @@ htmlcov/
 Thumbs.db
 
 # =========================
-# Docker
+# Cache
 # =========================
 
-docker-compose.override.yml
-
-# =========================
-# Celery
-# =========================
-
-celerybeat-schedule
-
-# =========================
-# Database backups
-# =========================
-
-*.sql
-*.dump
-*.backup
-
-# =========================
-# Documentation / local files
-# =========================
-
-*.tmp
-*.bak
-
-# =========================
-# Kubernetes local files
-# =========================
-
-*.secret.yaml
-*.local.yaml
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
