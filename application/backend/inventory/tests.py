@@ -1,13 +1,21 @@
+from io import BytesIO
 from decimal import Decimal
 from concurrent.futures import ThreadPoolExecutor
+from tempfile import TemporaryDirectory
 from threading import Barrier
 from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import close_old_connections
 from django.db import IntegrityError, OperationalError
-from django.test import TransactionTestCase, skipUnlessDBFeature
+from django.test import (
+    TransactionTestCase,
+    override_settings,
+    skipUnlessDBFeature,
+)
 from django.urls import reverse
+from PIL import Image
 from rest_framework import status
 from rest_framework.exceptions import ValidationError
 from rest_framework.test import APITestCase
@@ -864,6 +872,319 @@ class OrderStockConcurrencyTests(TransactionTestCase):
         self.assertEqual(self.inventory.quantity, 2)
         self.assertEqual(Order.objects.count(), 1)
         self.assertEqual(OrderItem.objects.count(), 1)
+
+
+class ProductImageAPITests(APITestCase):
+    def setUp(self):
+        self.temporary_media = TemporaryDirectory()
+        self.addCleanup(self.temporary_media.cleanup)
+        media_override = override_settings(
+            MEDIA_ROOT=self.temporary_media.name
+        )
+        media_override.enable()
+        self.addCleanup(media_override.disable)
+
+        admin_group = Group.objects.create(name="Admin")
+        self.admin_user = get_user_model().objects.create_user(
+            username="product-image-admin"
+        )
+        self.admin_user.groups.add(admin_group)
+        self.client.force_authenticate(self.admin_user)
+        self.product_url = reverse("product-list")
+
+    def image_upload(
+        self,
+        name="product.png",
+        image_format="PNG",
+        size=(32, 32),
+    ):
+        buffer = BytesIO()
+        Image.new("RGB", size, color=(20, 100, 180)).save(
+            buffer,
+            format=image_format,
+        )
+        content_types = {
+            "BMP": "image/bmp",
+            "GIF": "image/gif",
+            "JPEG": "image/jpeg",
+            "PNG": "image/png",
+            "WEBP": "image/webp",
+        }
+        return SimpleUploadedFile(
+            name,
+            buffer.getvalue(),
+            content_type=content_types[image_format],
+        )
+
+    def create_product(self, image=None, **overrides):
+        payload = {
+            "name": "Image Product",
+            "sku": "IMAGE-001",
+            "price": "49.90",
+            **overrides,
+        }
+        if image is not None:
+            payload["image"] = image
+        return self.client.post(
+            self.product_url,
+            payload,
+            format="multipart" if image is not None else "json",
+        )
+
+    def create_order_item(self, product):
+        warehouse = Warehouse.objects.create(
+            name="Image Warehouse",
+            location="Image Test Location",
+        )
+        order = Order.objects.create(user=self.admin_user)
+        OrderItem.objects.create(
+            order=order,
+            product=product,
+            warehouse=warehouse,
+            quantity=1,
+            unit_price=product.price,
+        )
+        return order
+
+    def test_product_can_be_created_without_image(self):
+        response = self.create_product()
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertIsNone(response.json()["image"])
+        self.assertFalse(Product.objects.get(pk=response.json()["id"]).image)
+
+    def test_product_can_be_created_with_valid_image(self):
+        response = self.create_product(self.image_upload())
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertIsNotNone(response.json()["image"])
+
+    def test_supported_image_formats_are_accepted(self):
+        formats = (
+            ("JPEG", "product.jpg"),
+            ("PNG", "product.png"),
+            ("WEBP", "product.webp"),
+        )
+        for index, (image_format, filename) in enumerate(formats):
+            with self.subTest(image_format=image_format):
+                response = self.create_product(
+                    self.image_upload(filename, image_format),
+                    sku=f"IMAGE-{index + 10}",
+                )
+                self.assertEqual(
+                    response.status_code,
+                    status.HTTP_201_CREATED,
+                )
+
+    def test_uploaded_image_is_persisted(self):
+        response = self.create_product(self.image_upload())
+        product = Product.objects.get(pk=response.json()["id"])
+
+        self.assertTrue(product.image.name.startswith("products/"))
+        self.assertTrue(product.image.storage.exists(product.image.name))
+
+    def test_product_api_returns_deployment_independent_image_url(self):
+        response = self.create_product(self.image_upload())
+        product = Product.objects.get(pk=response.json()["id"])
+        image_url = response.json()["image"]
+
+        self.assertTrue(image_url.endswith(product.image.url))
+        self.assertIn("/media/products/", image_url)
+        self.assertNotIn(self.temporary_media.name, image_url)
+
+    def test_patch_without_image_preserves_existing_image(self):
+        create_response = self.create_product(self.image_upload())
+        product = Product.objects.get(pk=create_response.json()["id"])
+        original_image_name = product.image.name
+
+        response = self.client.patch(
+            reverse("product-detail", args=(product.pk,)),
+            {"price": "59.90"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        product.refresh_from_db()
+        self.assertEqual(product.image.name, original_image_name)
+        self.assertTrue(product.image.storage.exists(original_image_name))
+
+    def test_product_image_can_be_replaced(self):
+        create_response = self.create_product(self.image_upload())
+        product = Product.objects.get(pk=create_response.json()["id"])
+        original_image_name = product.image.name
+        storage = product.image.storage
+
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.patch(
+                reverse("product-detail", args=(product.pk,)),
+                {"image": self.image_upload("replacement.webp", "WEBP")},
+                format="multipart",
+            )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        product.refresh_from_db()
+        self.assertNotEqual(product.image.name, original_image_name)
+        self.assertTrue(storage.exists(product.image.name))
+        self.assertFalse(storage.exists(original_image_name))
+
+    def test_product_image_can_be_removed_explicitly(self):
+        create_response = self.create_product(self.image_upload())
+        product = Product.objects.get(pk=create_response.json()["id"])
+        original_image_name = product.image.name
+        storage = product.image.storage
+
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.patch(
+                reverse("product-detail", args=(product.pk,)),
+                {"remove_image": True},
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIsNone(response.json()["image"])
+        product.refresh_from_db()
+        self.assertFalse(product.image)
+        self.assertFalse(storage.exists(original_image_name))
+
+    def test_invalid_non_image_upload_is_rejected(self):
+        invalid_file = SimpleUploadedFile(
+            "not-an-image.png",
+            b"This is not image data.",
+            content_type="image/png",
+        )
+
+        response = self.create_product(invalid_file)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("image", response.json())
+        self.assertFalse(Product.objects.exists())
+
+    def test_oversized_image_is_rejected(self):
+        oversized_image = self.image_upload(
+            "oversized.bmp",
+            "BMP",
+            size=(2000, 1000),
+        )
+        self.assertGreater(oversized_image.size, 5 * 1024 * 1024)
+
+        response = self.create_product(oversized_image)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("5 MB", response.json()["image"][0])
+        self.assertFalse(Product.objects.exists())
+
+    def test_unsupported_image_format_is_rejected(self):
+        response = self.create_product(
+            self.image_upload("animated.gif", "GIF")
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("Unsupported image format", response.json()["image"][0])
+        self.assertFalse(Product.objects.exists())
+
+    def test_svg_upload_is_rejected(self):
+        svg_file = SimpleUploadedFile(
+            "product.svg",
+            b'<svg xmlns="http://www.w3.org/2000/svg"></svg>',
+            content_type="image/svg+xml",
+        )
+
+        response = self.create_product(svg_file)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("image", response.json())
+        self.assertFalse(Product.objects.exists())
+
+    def test_persian_product_name_is_preserved_with_image(self):
+        response = self.create_product(
+            self.image_upload(),
+            name="اسکنر انبار",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        product = Product.objects.get(pk=response.json()["id"])
+        self.assertEqual(product.name, "اسکنر انبار")
+
+    def test_product_permissions_remain_unchanged_for_image_uploads(self):
+        operator_group = Group.objects.create(name="Operator")
+        operator = get_user_model().objects.create_user(
+            username="product-image-operator"
+        )
+        operator.groups.add(operator_group)
+        self.client.force_authenticate(operator)
+
+        response = self.create_product(
+            self.image_upload(),
+            sku="IMAGE-FORBIDDEN",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertFalse(Product.objects.filter(sku="IMAGE-FORBIDDEN").exists())
+
+    def test_order_detail_and_list_expose_product_image(self):
+        product_response = self.create_product(self.image_upload())
+        product = Product.objects.get(pk=product_response.json()["id"])
+        order = self.create_order_item(product)
+
+        detail_response = self.client.get(
+            reverse("order-detail", args=(order.pk,))
+        )
+        list_response = self.client.get(reverse("order-list"))
+
+        self.assertEqual(detail_response.status_code, status.HTTP_200_OK)
+        detail_image = detail_response.json()["items"][0]["product"]["image"]
+        self.assertTrue(detail_image.endswith(product.image.url))
+        listed_order = next(
+            item
+            for item in list_response.json()["results"]
+            if item["id"] == order.pk
+        )
+        self.assertTrue(
+            listed_order["items"][0]["product"]["image"].endswith(
+                product.image.url
+            )
+        )
+
+    def test_order_without_product_image_serializes_null(self):
+        product = Product.objects.create(
+            name="Product Without Image",
+            sku="IMAGE-NONE",
+            price="20.00",
+        )
+        order = self.create_order_item(product)
+
+        response = self.client.get(
+            reverse("order-detail", args=(order.pk,))
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIsNone(
+            response.json()["items"][0]["product"]["image"]
+        )
+
+    def test_order_uses_current_product_image_and_historical_price(self):
+        product_response = self.create_product(self.image_upload())
+        product = Product.objects.get(pk=product_response.json()["id"])
+        order = self.create_order_item(product)
+        historical_price = order.items.get().unit_price
+
+        with self.captureOnCommitCallbacks(execute=True):
+            update_response = self.client.patch(
+                reverse("product-detail", args=(product.pk,)),
+                {"image": self.image_upload("current.webp", "WEBP")},
+                format="multipart",
+            )
+        self.assertEqual(update_response.status_code, status.HTTP_200_OK)
+        product.refresh_from_db()
+
+        response = self.client.get(
+            reverse("order-detail", args=(order.pk,))
+        )
+
+        item = response.json()["items"][0]
+        self.assertTrue(item["product"]["image"].endswith(product.image.url))
+        self.assertEqual(Decimal(item["unit_price"]), historical_price)
+
 
 class InventoryRBACAPITests(APITestCase):
     @classmethod

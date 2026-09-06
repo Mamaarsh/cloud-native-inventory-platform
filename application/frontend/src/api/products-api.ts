@@ -3,6 +3,19 @@ import type { PaginatedResponse, Product, ProductQueryParams, ProductRequest } f
 
 const path = "/v1/products/";
 
+type ProductPayload = ProductRequest | Partial<ProductRequest>;
+
+function prepareProductPayload(payload: ProductPayload): ProductPayload | FormData {
+  if (!(payload.image instanceof File)) return payload;
+
+  const formData = new FormData();
+  for (const [field, value] of Object.entries(payload)) {
+    if (value === undefined) continue;
+    formData.append(field, value instanceof File ? value : String(value));
+  }
+  return formData;
+}
+
 export async function listProducts(params: ProductQueryParams = {}): Promise<PaginatedResponse<Product>> {
   const { data } = await apiClient.get<PaginatedResponse<Product>>(path, { params });
   return data;
@@ -27,12 +40,15 @@ export async function getProduct(id: number): Promise<Product> {
 }
 
 export async function createProduct(payload: ProductRequest): Promise<Product> {
-  const { data } = await apiClient.post<Product>(path, payload);
+  const { data } = await apiClient.post<Product>(path, prepareProductPayload(payload));
   return data;
 }
 
 export async function updateProduct(id: number, payload: Partial<ProductRequest>): Promise<Product> {
-  const { data } = await apiClient.patch<Product>(`${path}${id}/`, payload);
+  const { data } = await apiClient.patch<Product>(
+    `${path}${id}/`,
+    prepareProductPayload(payload),
+  );
   return data;
 }
 

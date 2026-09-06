@@ -42,8 +42,8 @@ RUN python -m pip install \
 
 COPY --chown=appuser:appgroup . .
 
-RUN mkdir -p /app/staticfiles \
-    && chown -R appuser:appgroup /app/staticfiles \
+RUN mkdir -p /app/staticfiles /app/media \
+    && chown -R appuser:appgroup /app/staticfiles /app/media \
     && chmod +x /app/entrypoint.sh
 
 USER appuser

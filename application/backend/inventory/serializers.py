@@ -1,16 +1,84 @@
+from functools import partial
+
+from django.db import transaction
 from rest_framework import serializers
 from .models import Inventory, Order, OrderItem, Payment, Product, Warehouse
 from .services import create_order
+from .validators import validate_product_image
 
 class ProductSerializer(serializers.ModelSerializer):
+    image = serializers.ImageField(
+        required=False,
+        allow_null=False,
+        validators=(validate_product_image,),
+    )
+    remove_image = serializers.BooleanField(
+        required=False,
+        default=False,
+        write_only=True,
+    )
+
     class Meta:
         model = Product
-        fields = "__all__"
+        fields = (
+            "id",
+            "name",
+            "sku",
+            "price",
+            "is_active",
+            "image",
+            "remove_image",
+            "created_at",
+            "updated_at",
+        )
         read_only_fields = (
             "id",
             "created_at",
             "updated_at",
         )
+
+    def validate(self, attrs):
+        if attrs.get("remove_image") and "image" in attrs:
+            raise serializers.ValidationError(
+                {
+                    "remove_image": (
+                        "Image upload and removal cannot be requested together."
+                    )
+                }
+            )
+        if self.instance is None and attrs.get("remove_image"):
+            raise serializers.ValidationError(
+                {"remove_image": "There is no existing image to remove."}
+            )
+        return attrs
+
+    def create(self, validated_data):
+        validated_data.pop("remove_image", False)
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        remove_image = validated_data.pop("remove_image", False)
+        replacing_image = "image" in validated_data
+        old_image_name = instance.image.name if instance.image else None
+        old_image_storage = instance.image.storage if instance.image else None
+
+        if remove_image:
+            validated_data["image"] = None
+
+        product = super().update(instance, validated_data)
+        new_image_name = product.image.name if product.image else None
+
+        if (
+            old_image_name
+            and old_image_storage
+            and (remove_image or replacing_image)
+            and old_image_name != new_image_name
+        ):
+            transaction.on_commit(
+                partial(old_image_storage.delete, old_image_name)
+            )
+
+        return product
 
 class WarehouseSerializer(serializers.ModelSerializer):
     class Meta:
@@ -37,6 +105,7 @@ class OrderProductSerializer(serializers.ModelSerializer):
             "id",
             "name",
             "sku",
+            "image",
         )
 
 class OrderWarehouseSerializer(serializers.ModelSerializer):

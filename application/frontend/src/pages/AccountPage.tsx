@@ -165,12 +165,12 @@ export function AccountPage() {
         description="Your authenticated identity and access information from the inventory platform."
       />
 
-      <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+      <div className="grid items-start gap-6 xl:grid-cols-[1.15fr_0.85fr]">
         <Card className="overflow-hidden">
           <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 bg-slate-50/70 px-6 py-5">
             <div>
               <h3 className="font-bold text-slate-950">Profile</h3>
-              <p className="mt-1 text-xs text-slate-500">Information returned by `/api/auth/me/`</p>
+              <p className="mt-1 text-xs text-slate-500">Personal details and account identity</p>
             </div>
             {!isEditing ? (
               <Button size="sm" variant="outline" onClick={beginEditing}>
@@ -185,8 +185,8 @@ export function AccountPage() {
                 {successMessage}
               </div>
             ) : null}
-            <div className="flex items-center gap-4 border-b border-slate-100 pb-6">
-              <span className="grid size-16 shrink-0 place-items-center rounded-2xl bg-slate-900 text-lg font-bold text-white">
+            <div className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-slate-50/70 p-5">
+              <span className="grid size-16 shrink-0 place-items-center rounded-2xl bg-brand-600 text-lg font-bold text-white shadow-sm ring-4 ring-white">
                 {initials}
               </span>
               <div className="min-w-0">
@@ -248,7 +248,7 @@ export function AccountPage() {
                 </div>
               </form>
             ) : (
-              <dl className="mt-6 grid gap-5 sm:grid-cols-2">
+              <dl className="mt-6 grid gap-px overflow-hidden rounded-2xl border border-slate-200 bg-slate-200 sm:grid-cols-2 [&>div]:bg-white [&>div]:p-4">
                 <div>
                   <dt className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500">
                     <UserRound className="size-4" aria-hidden="true" /> Username
@@ -299,7 +299,7 @@ export function AccountPage() {
         <div className="space-y-6">
           <Card className="p-6">
             <div className="flex items-start gap-3">
-              <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-brand-50 text-brand-700">
+              <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-brand-50 text-brand-700 ring-1 ring-inset ring-brand-100">
                 <ShieldCheck className="size-5" aria-hidden="true" />
               </span>
               <div>
@@ -310,7 +310,7 @@ export function AccountPage() {
               </div>
             </div>
             {currentUser.groups.length > 0 ? (
-              <div className="mt-5 flex flex-wrap gap-2">
+              <div className="mt-5 flex flex-wrap gap-2 border-t border-slate-200 pt-5">
                 {currentUser.groups.map((group) => (
                   <Badge key={group} tone={group === primaryRole ? "blue" : "slate"}>
                     {group}
@@ -322,14 +322,14 @@ export function AccountPage() {
                 No Django group is currently assigned.
               </p>
             )}
-            <p className="mt-4 text-xs leading-5 text-slate-500">
+            <p className="mt-5 rounded-xl bg-slate-50 px-4 py-3 text-xs leading-5 text-slate-500">
               Frontend controls reflect your groups; backend permissions remain authoritative.
             </p>
           </Card>
 
           <Card className="p-6">
             <div className="flex items-start gap-3">
-              <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-slate-100 text-slate-600">
+              <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200">
                 <LockKeyhole className="size-5" aria-hidden="true" />
               </span>
               <div className="min-w-0 flex-1">

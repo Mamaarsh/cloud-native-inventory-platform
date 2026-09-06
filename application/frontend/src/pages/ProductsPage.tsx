@@ -2,6 +2,7 @@ import { useState } from "react";
 import { PackageSearch, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { RoleGuard } from "@/auth/RoleGuard";
 import { ProductForm } from "@/components/products/ProductForm";
+import { ProductImage } from "@/components/products/ProductImage";
 import { BackgroundFetchIndicator } from "@/components/ui/BackgroundFetchIndicator";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -117,7 +118,15 @@ export function ProductsPage() {
                 <tbody className="divide-y divide-slate-200/70">
                   {products.data.results.map((product) => (
                     <tr key={product.id} className="transition-colors hover:bg-brand-50/35 motion-reduce:transition-none">
-                      <td className="px-6 py-4"><p dir="auto" className="font-semibold text-slate-900">{product.name}</p><p className="mt-0.5 text-xs text-slate-500">ID {product.id}</p></td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <ProductImage src={product.image} size="sm" />
+                          <div className="min-w-0">
+                            <p dir="auto" className="font-semibold text-slate-900">{product.name}</p>
+                            <p className="mt-0.5 text-xs text-slate-500">ID {product.id}</p>
+                          </div>
+                        </div>
+                      </td>
                       <td className="px-6 py-4 font-mono text-sm text-slate-600">{product.sku}</td>
                       <td className="px-6 py-4 text-right text-sm font-semibold tabular-nums text-slate-800">{formatCurrency(product.price)}</td>
                       <td className="px-6 py-4"><Badge tone={product.is_active ? "green" : "slate"}>{product.is_active ? "Active" : "Inactive"}</Badge></td>

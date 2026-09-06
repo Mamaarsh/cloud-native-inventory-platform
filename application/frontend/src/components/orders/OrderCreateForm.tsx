@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
+import { ProductImage } from "@/components/products/ProductImage";
 import { Button } from "@/components/ui/Button";
 import { ErrorMessage } from "@/components/ui/ErrorMessage";
 import { Input } from "@/components/ui/Input";
@@ -57,16 +58,30 @@ export function OrderCreateForm({ onSubmit, onCancel, isSubmitting, serverError 
       {validationError ? <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800" role="alert">{validationError}</p> : null}
       {serverError ? <ErrorMessage error={serverError} title="Order could not be created" /> : null}
       <div className="space-y-4">
-        {items.map((item, index) => (
-          <div key={index} className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
-            <div className="mb-4 flex items-center justify-between"><p className="text-sm font-bold text-slate-800">Item {index + 1}</p>{items.length > 1 ? <button type="button" onClick={() => setItems((current) => current.filter((_, itemIndex) => itemIndex !== index))} className="grid size-10 place-items-center rounded-lg text-slate-500 hover:bg-rose-50 hover:text-rose-700" aria-label={`Remove item ${index + 1}`}><Trash2 className="size-4" aria-hidden="true" /></button> : null}</div>
-            <div className="grid gap-4 md:grid-cols-[1.3fr_1.3fr_0.6fr]">
-              <Select label="Product" dir="auto" value={item.product || ""} onChange={(event) => updateItem(index, { product: Number(event.target.value) })} required><option value="">Choose product</option>{activeProducts.map((product) => <option key={product.id} value={product.id}>{product.name} · {product.sku}</option>)}</Select>
-              <Select label="Warehouse" dir="auto" value={item.warehouse || ""} onChange={(event) => updateItem(index, { warehouse: Number(event.target.value) })} required><option value="">Choose warehouse</option>{warehouses.data?.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</Select>
-              <Input label="Quantity" type="number" min="1" step="1" value={item.quantity} onChange={(event) => updateItem(index, { quantity: Number(event.target.value) })} required />
+        {items.map((item, index) => {
+          const selectedProduct = activeProducts.find(
+            (product) => product.id === item.product,
+          );
+
+          return (
+            <div key={index} className="rounded-2xl border border-slate-200 bg-slate-50/70 p-5 shadow-[0_1px_2px_rgb(15_23_42/0.03)]">
+              <div className="mb-4 flex items-center justify-between"><p className="text-sm font-bold text-slate-800">Item {index + 1}</p>{items.length > 1 ? <button type="button" onClick={() => setItems((current) => current.filter((_, itemIndex) => itemIndex !== index))} className="grid size-10 place-items-center rounded-lg text-slate-500 hover:bg-rose-50 hover:text-rose-700" aria-label={`Remove item ${index + 1}`}><Trash2 className="size-4" aria-hidden="true" /></button> : null}</div>
+              <div className="grid gap-4 md:grid-cols-[1.3fr_1.3fr_0.6fr]">
+                <div>
+                  <Select label="Product" dir="auto" value={item.product || ""} onChange={(event) => updateItem(index, { product: Number(event.target.value) })} required><option value="">Choose product</option>{activeProducts.map((product) => <option key={product.id} value={product.id}>{product.name} · {product.sku}</option>)}</Select>
+                  {selectedProduct ? (
+                    <div className="mt-2 flex items-center gap-2 text-xs text-slate-500">
+                      <ProductImage src={selectedProduct.image} size="sm" />
+                      <span dir="auto" className="truncate">{selectedProduct.name}</span>
+                    </div>
+                  ) : null}
+                </div>
+                <Select label="Warehouse" dir="auto" value={item.warehouse || ""} onChange={(event) => updateItem(index, { warehouse: Number(event.target.value) })} required><option value="">Choose warehouse</option>{warehouses.data?.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</Select>
+                <Input label="Quantity" type="number" min="1" step="1" value={item.quantity} onChange={(event) => updateItem(index, { quantity: Number(event.target.value) })} required />
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
       <Button variant="outline" size="sm" onClick={() => setItems((current) => [...current, emptyItem()])}><Plus className="size-4" /> Add item</Button>
       <div className="flex justify-end gap-3 border-t border-slate-200 pt-5"><Button variant="outline" onClick={onCancel}>Cancel</Button><Button type="submit" isLoading={isSubmitting}>Create order</Button></div>

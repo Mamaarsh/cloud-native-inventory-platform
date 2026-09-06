@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Boxes, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { RoleGuard } from "@/auth/RoleGuard";
 import { InventoryForm } from "@/components/inventory/InventoryForm";
+import { ProductImage } from "@/components/products/ProductImage";
 import { BackgroundFetchIndicator } from "@/components/ui/BackgroundFetchIndicator";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -124,8 +125,8 @@ export function InventoryPage() {
         }
       />
 
-      <Card aria-busy={inventory.isPending}>
-        <div className="grid gap-4 border-b border-slate-200 p-5 md:grid-cols-3">
+      <Card className="overflow-hidden" aria-busy={inventory.isPending}>
+        <div className="grid gap-4 border-b border-slate-200 bg-slate-50/70 px-6 py-5 md:grid-cols-3">
           <div className="relative self-end">
             <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
             <input
@@ -137,7 +138,7 @@ export function InventoryPage() {
               }}
               placeholder="Search stock"
               aria-label="Search inventory"
-              className="min-h-11 w-full rounded-xl border border-slate-300 pl-10 pr-4 text-sm"
+              className="min-h-11 w-full rounded-xl border border-slate-300 bg-white pl-10 pr-4 text-sm shadow-sm transition-colors hover:border-slate-400 focus:border-brand-600 motion-reduce:transition-none"
             />
           </div>
 
@@ -215,7 +216,7 @@ export function InventoryPage() {
           <>
             <div className="table-scroll overflow-x-auto">
               <table className="w-full min-w-[820px] text-left">
-                <thead className="bg-slate-50/80 text-xs font-bold uppercase tracking-wider text-slate-500">
+                <thead className="border-y border-slate-200 bg-slate-100/80 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-600">
                   <tr>
                     <th scope="col" className="px-6 py-4">Product</th>
                     <th scope="col" className="px-6 py-4">Warehouse</th>
@@ -225,20 +226,25 @@ export function InventoryPage() {
                     <th scope="col" className="px-6 py-4 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-slate-200/70">
                   {inventory.data.results.map((item) => {
                     const productRecord = productMap.get(item.product);
                     const warehouseRecord = warehouseMap.get(item.warehouse);
 
                     return (
-                      <tr key={item.id} className="hover:bg-slate-50/70">
+                      <tr key={item.id} className="transition-colors hover:bg-brand-50/35 motion-reduce:transition-none">
                         <td className="px-6 py-4">
-                          <p dir="auto" className="font-semibold text-slate-900">
-                            {productRecord?.name ?? `Product #${item.product}`}
-                          </p>
-                          <p className="mt-0.5 font-mono text-xs text-slate-500">
-                            {productRecord?.sku ?? "Details unavailable"}
-                          </p>
+                          <div className="flex items-center gap-3">
+                            <ProductImage src={productRecord?.image} size="sm" />
+                            <div className="min-w-0">
+                              <p dir="auto" className="font-semibold text-slate-900">
+                                {productRecord?.name ?? `Product #${item.product}`}
+                              </p>
+                              <p className="mt-0.5 font-mono text-xs text-slate-500">
+                                {productRecord?.sku ?? "Details unavailable"}
+                              </p>
+                            </div>
+                          </div>
                         </td>
                         <td className="px-6 py-4">
                           <p dir="auto" className="text-sm font-medium text-slate-800">
@@ -271,7 +277,7 @@ export function InventoryPage() {
                               <button
                                 type="button"
                                 onClick={() => openForm(item)}
-                                className="grid size-10 place-items-center rounded-lg text-slate-500 hover:bg-brand-50 hover:text-brand-700"
+                                className="grid size-10 place-items-center rounded-lg text-slate-500 transition-colors hover:bg-brand-50 hover:text-brand-700 motion-reduce:transition-none"
                                 aria-label={`Edit inventory for ${productRecord?.name ?? `product ${item.product}`}`}
                               >
                                 <Pencil className="size-4" aria-hidden="true" />
@@ -281,7 +287,7 @@ export function InventoryPage() {
                               <button
                                 type="button"
                                 onClick={() => setDeleting(item)}
-                                className="grid size-10 place-items-center rounded-lg text-slate-500 hover:bg-rose-50 hover:text-rose-700"
+                                className="grid size-10 place-items-center rounded-lg text-slate-500 transition-colors hover:bg-rose-50 hover:text-rose-700 motion-reduce:transition-none"
                                 aria-label={`Delete inventory for ${productRecord?.name ?? `product ${item.product}`}`}
                               >
                                 <Trash2 className="size-4" aria-hidden="true" />
@@ -295,7 +301,7 @@ export function InventoryPage() {
                 </tbody>
               </table>
             </div>
-            <div className="border-t border-slate-200 p-5">
+            <div className="border-t border-slate-200 bg-slate-50/50 px-6 py-4">
               <Pagination
                 page={page}
                 count={inventory.data.count}

@@ -32,6 +32,43 @@ export interface PasswordChangeResponse {
   detail: string;
 }
 
+export interface UserRegistrationRequest {
+  username: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+  password: string;
+  password_confirm: string;
+}
+
+export interface UserRegistrationResponse {
+  detail: string;
+}
+
+export type AdminUserStatus = "pending" | "active";
+
+export interface AdminUser {
+  id: number;
+  username: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+  is_active: boolean;
+  groups: string[];
+  date_joined: string;
+  is_staff: boolean;
+}
+
+export interface AdminUserQueryParams {
+  page?: number;
+  status?: AdminUserStatus;
+}
+
+export interface AdminUserUpdateRequest {
+  is_active?: boolean;
+  role?: Role;
+}
+
 export interface OrderUser {
   id: number;
   username: string;
@@ -44,6 +81,7 @@ export interface Product {
   sku: string;
   price: string;
   is_active: boolean;
+  image: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -75,6 +113,7 @@ export interface OrderItemProduct {
   id: number;
   name: string;
   sku: string;
+  image: string | null;
 }
 
 export interface OrderItemWarehouse {
@@ -171,6 +210,8 @@ export interface ProductRequest {
   sku: string;
   price: string;
   is_active: boolean;
+  image?: File;
+  remove_image?: boolean;
 }
 
 export interface WarehouseRequest {

@@ -1,6 +1,17 @@
 import { useEffect, useRef, useState } from "react";
-import { Boxes, ClipboardList, LayoutDashboard, PackageSearch, Warehouse, X } from "lucide-react";
+import {
+  Boxes,
+  ClipboardList,
+  LayoutDashboard,
+  PackageSearch,
+  UsersRound,
+  Warehouse,
+  X,
+} from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
+import type { Role } from "@/types";
+import { ROLES } from "@/types";
 
 const mobileBreakpoint = "(max-width: 63.999rem)";
 const focusableSelector = [
@@ -20,12 +31,21 @@ interface SidebarProps {
   onClose: () => void;
 }
 
-const links = [
+interface NavigationLink {
+  to: string;
+  label: string;
+  icon: typeof Boxes;
+  end: boolean;
+  role?: Role;
+}
+
+const links: NavigationLink[] = [
   { to: "/", label: "Overview", icon: LayoutDashboard, end: true },
   { to: "/products", label: "Products", icon: PackageSearch, end: false },
   { to: "/warehouses", label: "Warehouses", icon: Warehouse, end: false },
   { to: "/inventory", label: "Inventory", icon: Boxes, end: false },
   { to: "/orders", label: "Orders", icon: ClipboardList, end: false },
+  { to: "/users", label: "Users", icon: UsersRound, end: false, role: ROLES.admin },
 ];
 
 function getFocusableElements(container: HTMLElement): HTMLElement[] {
@@ -36,6 +56,7 @@ function getFocusableElements(container: HTMLElement): HTMLElement[] {
 
 export function Sidebar({ open, onClose }: SidebarProps) {
   const location = useLocation();
+  const { hasRole } = useAuth();
   const [isMobile, setIsMobile] = useState(() =>
     typeof window === "undefined" ? false : window.matchMedia(mobileBreakpoint).matches,
   );
@@ -151,7 +172,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
       >
         <div className="dashboard-grid flex h-20 items-center justify-between border-b border-white/10 bg-white/[0.02] px-5">
           <NavLink to="/" onClick={onClose} className="flex items-center gap-3">
-            <span className="grid size-11 place-items-center rounded-xl bg-brand-600 shadow-lg shadow-brand-950/20 ring-1 ring-inset ring-white/20">
+            <span className="grid size-11 place-items-center rounded-xl bg-brand-600 shadow-lg shadow-black/20 ring-1 ring-inset ring-white/20">
               <Boxes className="size-5" aria-hidden="true" />
             </span>
             <span>
@@ -165,7 +186,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         </div>
         <nav ref={navigationRef} className="flex-1 space-y-2 px-3 py-6" aria-label="Primary navigation">
           <p className="mb-4 px-4 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">Workspace</p>
-          {links.map(({ to, label, icon: Icon, end }) => (
+          {links.filter(({ role }) => !role || hasRole(role)).map(({ to, label, icon: Icon, end }) => (
             <NavLink
               key={to}
               to={to}

@@ -26,6 +26,8 @@ services:
       SECRET_KEY: ${SECRET_KEY}
       DEBUG: ${DEBUG}
       ALLOWED_HOSTS: ${ALLOWED_HOSTS}
+    volumes:
+      - media_data:/app/media
 
   postgres:
     image: postgres:16-alpine
@@ -55,3 +57,4 @@ services:
 
 volumes:
   postgres_data:
+  media_data:

@@ -13,7 +13,6 @@ export const AUTH_LOGOUT_EVENT = "inventory:auth-logout";
 export const apiClient = axios.create({
   baseURL: apiBaseUrl,
   timeout: 15_000,
-  headers: { "Content-Type": "application/json" },
 });
 
 const refreshClient = axios.create({

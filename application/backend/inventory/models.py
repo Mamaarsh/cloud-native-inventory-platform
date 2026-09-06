@@ -1,11 +1,18 @@
 from django.db import models
 from django.conf import settings
+from .validators import validate_product_image
 
 class Product(models.Model):
     name = models.CharField(max_length=200)
     sku = models.CharField(max_length=100, unique=True)
     price = models.DecimalField(max_digits=12, decimal_places=2)
     is_active = models.BooleanField(default=True)
+    image = models.ImageField(
+        upload_to="products/%Y/%m/",
+        validators=(validate_product_image,),
+        blank=True,
+        null=True,
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

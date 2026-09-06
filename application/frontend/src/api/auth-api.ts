@@ -6,6 +6,8 @@ import type {
   TokenRequest,
   User,
   UserProfileUpdateRequest,
+  UserRegistrationRequest,
+  UserRegistrationResponse,
 } from "@/types";
 
 export async function requestTokens(credentials: TokenRequest): Promise<TokenPair> {
@@ -28,6 +30,16 @@ export async function changeCurrentUserPassword(
 ): Promise<PasswordChangeResponse> {
   const { data } = await apiClient.post<PasswordChangeResponse>(
     "/auth/change-password/",
+    payload,
+  );
+  return data;
+}
+
+export async function registerUser(
+  payload: UserRegistrationRequest,
+): Promise<UserRegistrationResponse> {
+  const { data } = await apiClient.post<UserRegistrationResponse>(
+    "/auth/register/",
     payload,
   );
   return data;

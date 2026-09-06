@@ -5,21 +5,42 @@ WAREHOUSE_MANAGER = "Warehouse Manager"
 OPERATOR = "Operator"
 AUDITOR = "Auditor"
 
-def _has_any_role(user, *role_names):
+APPLICATION_ROLES = (
+    ADMIN,
+    WAREHOUSE_MANAGER,
+    OPERATOR,
+    AUDITOR,
+)
+
+
+def _has_any_role(user, *role_names, allow_superuser=True):
     if not user or not user.is_authenticated:
         return False
-    if user.is_superuser:
+    if allow_superuser and user.is_superuser:
         return True
     return user.groups.filter(name__in=role_names).exists()
 
+
 class _IsRole(BasePermission):
     role_name = None
+    allow_superuser = True
 
     def has_permission(self, request, view):
-        return _has_any_role(request.user, self.role_name)
+        return _has_any_role(
+            request.user,
+            self.role_name,
+            allow_superuser=self.allow_superuser,
+        )
+
 
 class IsAdmin(_IsRole):
     role_name = ADMIN
+
+
+class IsApplicationAdmin(_IsRole):
+    role_name = ADMIN
+    allow_superuser = False
+
 
 class IsWarehouseManager(_IsRole):
     role_name = WAREHOUSE_MANAGER
