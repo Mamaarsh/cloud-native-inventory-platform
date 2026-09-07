@@ -3,6 +3,7 @@ import {
   changeOrderStatus,
   createOrder,
   getOrder,
+  getOrderHistory,
   listOrders,
   payOrder,
 } from "@/api/orders-api";
@@ -18,6 +19,7 @@ export const orderKeys = {
   lists: () => [...orderKeys.all, "list"] as const,
   list: (params: OrderQueryParams) => [...orderKeys.lists(), params] as const,
   detail: (id: number) => [...orderKeys.all, "detail", id] as const,
+  history: (id: number) => [...orderKeys.all, "history", id] as const,
 };
 
 export function useOrders(params: OrderQueryParams = {}) {
@@ -32,6 +34,14 @@ export function useOrder(id: number) {
   return useQuery({
     queryKey: orderKeys.detail(id),
     queryFn: () => getOrder(id),
+    enabled: Number.isInteger(id) && id > 0,
+  });
+}
+
+export function useOrderHistory(id: number) {
+  return useQuery({
+    queryKey: orderKeys.history(id),
+    queryFn: () => getOrderHistory(id),
     enabled: Number.isInteger(id) && id > 0,
   });
 }
@@ -58,6 +68,7 @@ export function useChangeOrderStatus() {
     onSuccess: async (order) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: orderKeys.detail(order.id) }),
+        queryClient.invalidateQueries({ queryKey: orderKeys.history(order.id) }),
         queryClient.invalidateQueries({ queryKey: orderKeys.lists() }),
       ]);
     },
@@ -71,6 +82,7 @@ export function usePayOrder() {
     onSuccess: async (payment) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: orderKeys.detail(payment.order) }),
+        queryClient.invalidateQueries({ queryKey: orderKeys.history(payment.order) }),
         queryClient.invalidateQueries({ queryKey: orderKeys.lists() }),
       ]);
     },

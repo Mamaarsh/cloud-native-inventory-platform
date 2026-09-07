@@ -82,6 +82,11 @@ export function ProductsPage() {
     updateMutation.reset();
   }
 
+  function closeDeleteModal(): void {
+    setDeleting(null);
+    deleteMutation.reset();
+  }
+
   async function saveProduct(payload: ProductRequest): Promise<void> {
     if (editing) {
       await updateMutation.mutateAsync({ id: editing.id, payload });
@@ -95,9 +100,13 @@ export function ProductsPage() {
 
   async function confirmDelete(): Promise<void> {
     if (!deleting) return;
-    await deleteMutation.mutateAsync(deleting.id);
-    setDeleting(null);
-    showSuccess("Product deleted.");
+    try {
+      await deleteMutation.mutateAsync(deleting.id);
+      setDeleting(null);
+      showSuccess("Product deleted.");
+    } catch {
+      // The mutation error remains visible in the confirmation modal.
+    }
   }
 
   return (
@@ -205,10 +214,10 @@ export function ProductsPage() {
       <Modal open={formOpen} onClose={closeForm} title={editing ? "Edit product" : "Create product"} description="Catalog fields are validated again by the backend.">
         <ProductForm key={editing?.id ?? "new"} product={editing ?? undefined} onSubmit={saveProduct} onCancel={closeForm} isSubmitting={createMutation.isPending || updateMutation.isPending} serverError={createMutation.error ?? updateMutation.error} />
       </Modal>
-      <Modal open={Boolean(deleting)} onClose={() => { setDeleting(null); deleteMutation.reset(); }} title="Delete product" description="This action cannot be undone." size="sm" isBusy={deleteMutation.isPending}>
-        {deleteMutation.isError ? <div className="mb-4"><ErrorMessage error={deleteMutation.error} /></div> : null}
-        <p className="text-sm leading-6 text-slate-600">Delete <strong>{deleting?.name}</strong>? Products referenced by orders may be protected by the backend.</p>
-        <div className="mt-6 flex justify-end gap-3"><Button variant="outline" disabled={deleteMutation.isPending} onClick={() => setDeleting(null)}>Cancel</Button><Button data-modal-destructive="true" variant="danger" isLoading={deleteMutation.isPending} onClick={() => void confirmDelete()}>Delete product</Button></div>
+      <Modal open={Boolean(deleting)} onClose={closeDeleteModal} title="Delete product" description="This action cannot be undone." size="sm" isBusy={deleteMutation.isPending}>
+        {deleteMutation.isError ? <div className="mb-4"><ErrorMessage error={deleteMutation.error} title="Product could not be deleted" fallbackMessage="The product could not be deleted. Please try again." /></div> : null}
+        <p className="text-sm leading-6 text-slate-600">Delete <strong>{deleting?.name}</strong>? Products already used by inventory or orders must be deactivated through Edit instead.</p>
+        <div className="mt-6 flex justify-end gap-3"><Button variant="outline" disabled={deleteMutation.isPending} onClick={closeDeleteModal}>Cancel</Button><Button data-modal-destructive="true" variant="danger" isLoading={deleteMutation.isPending} onClick={() => void confirmDelete()}>Delete product</Button></div>
       </Modal>
     </>
   );

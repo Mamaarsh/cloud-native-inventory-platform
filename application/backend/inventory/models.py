@@ -144,6 +144,69 @@ class Order(models.Model):
     def __str__(self):
         return f"Order #{self.id} - {self.status}"
 
+class OrderStatusHistory(models.Model):
+    order = models.ForeignKey(
+        Order,
+        on_delete=models.PROTECT,
+        related_name="status_history",
+    )
+    from_status = models.CharField(
+        max_length=20,
+        choices=Order.Status.choices,
+        null=True,
+        blank=True,
+    )
+    to_status = models.CharField(
+        max_length=20,
+        choices=Order.Status.choices,
+    )
+    performed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="order_status_changes",
+        null=True,
+        blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("created_at", "id")
+        indexes = (
+            models.Index(fields=("order", "created_at")),
+        )
+        constraints = (
+            models.CheckConstraint(
+                condition=(
+                    models.Q(from_status__isnull=True)
+                    | models.Q(from_status__in=Order.Status.values)
+                ),
+                name="order_history_from_status_valid",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(to_status__in=Order.Status.values),
+                name="order_history_to_status_valid",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(from_status__isnull=True)
+                    | ~models.Q(from_status=models.F("to_status"))
+                ),
+                name="order_history_statuses_differ",
+            ),
+        )
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ValidationError("Order status history is immutable.")
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError("Order status history is immutable.")
+
+    def __str__(self):
+        previous = self.from_status or "created"
+        return f"Order #{self.order_id}: {previous} -> {self.to_status}"
+
 class OrderItem(models.Model):
     order = models.ForeignKey(
         Order,

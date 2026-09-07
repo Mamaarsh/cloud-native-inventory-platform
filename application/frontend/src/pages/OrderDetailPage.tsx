@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ArrowLeft, CheckCircle2, CreditCard, MapPin, UserRound } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 import { ProductImage } from "@/components/products/ProductImage";
+import { OrderStatusTimeline } from "@/components/orders/OrderStatusTimeline";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ErrorMessage } from "@/components/ui/ErrorMessage";
@@ -88,7 +89,7 @@ export function OrderDetailPage() {
           </div>
         </div>
       ) : null}
-      <div className="grid gap-6 xl:grid-cols-[1fr_340px]">
+      <div className="grid items-start gap-6 xl:grid-cols-[1fr_340px]">
         <Card className="overflow-hidden">
           <div className="border-b border-slate-200 bg-slate-50/70 px-6 py-5"><h3 className="font-bold text-slate-950">Order items</h3><p className="mt-1 text-xs text-slate-500">Unit prices are historical snapshots captured at creation.</p></div>
           <div className="divide-y divide-slate-200/70">
@@ -162,6 +163,7 @@ export function OrderDetailPage() {
         <div className="space-y-6">
           <Card className="p-6"><h3 className="font-bold text-slate-950">Status workflow</h3><p className="mt-2 text-sm leading-6 text-slate-500">Only transitions allowed for your role and the current state are shown.</p>{transitions.length > 0 ? <div className="mt-5 space-y-2">{transitions.map((status) => <Button key={status} variant={status === OrderStatus.Cancelled ? "danger" : "primary"} className="w-full" isLoading={pendingTransition === status} disabled={statusMutation.isPending && pendingTransition !== status} onClick={() => void changeStatus(status)}>Mark as {titleCase(status)}</Button>)}</div> : <p className="mt-5 rounded-xl bg-slate-100 p-3 text-sm text-slate-600">No status actions are available.</p>}</Card>
           <Card className="p-6"><h3 className="font-bold text-slate-950">Customer</h3><div className="mt-4 flex items-center gap-3"><span className="grid size-10 place-items-center rounded-xl bg-brand-50 text-brand-700"><UserRound className="size-5" /></span><div><p className="text-sm font-semibold text-slate-900">{order.data.user.username}</p><p className="text-xs text-slate-500">{order.data.user.email || "No email address"}</p></div></div><dl className="mt-5 space-y-3 border-t border-slate-200 pt-4 text-sm"><div className="flex justify-between"><dt className="text-slate-500">Created</dt><dd className="font-medium text-slate-700">{formatDate(order.data.created_at)}</dd></div><div className="flex justify-between"><dt className="text-slate-500">Updated</dt><dd className="font-medium text-slate-700">{formatDate(order.data.updated_at)}</dd></div></dl></Card>
+          <OrderStatusTimeline orderId={orderId} />
         </div>
       </div>
       <Modal open={payOpen} onClose={() => setPayOpen(false)} title="Confirm payment" description="The backend payment service is idempotent for successful payments." size="sm" isBusy={paymentMutation.isPending}>

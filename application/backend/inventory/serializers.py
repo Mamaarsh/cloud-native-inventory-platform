@@ -6,6 +6,7 @@ from .models import (
     InventoryMovement,
     Order,
     OrderItem,
+    OrderStatusHistory,
     Payment,
     Product,
     Warehouse,
@@ -142,12 +143,12 @@ class InventorySerializer(serializers.ModelSerializer):
             )
         return inventory
 
-class InventoryMovementUserSerializer(serializers.Serializer):
+class AuditActorSerializer(serializers.Serializer):
     id = serializers.IntegerField(read_only=True)
     username = serializers.CharField(read_only=True)
 
 class InventoryMovementSerializer(serializers.ModelSerializer):
-    performed_by = InventoryMovementUserSerializer(read_only=True)
+    performed_by = AuditActorSerializer(read_only=True)
     order_id = serializers.IntegerField(read_only=True, allow_null=True)
 
     class Meta:
@@ -318,6 +319,20 @@ class OrderCreateSerializer(serializers.Serializer):
 
 class OrderStatusUpdateSerializer(serializers.Serializer):
     status = serializers.ChoiceField(choices=Order.Status.choices)
+
+class OrderStatusHistorySerializer(serializers.ModelSerializer):
+    performed_by = AuditActorSerializer(read_only=True)
+
+    class Meta:
+        model = OrderStatusHistory
+        fields = (
+            "id",
+            "from_status",
+            "to_status",
+            "performed_by",
+            "created_at",
+        )
+        read_only_fields = fields
 
 class PaymentRequestSerializer(serializers.Serializer):
     def validate(self, attrs):

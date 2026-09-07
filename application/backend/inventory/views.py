@@ -2,10 +2,11 @@ import logging
 from django.conf import settings
 from django.db import DatabaseError, connection
 from django.db.models import Prefetch
+from django.db.models.deletion import ProtectedError
 from drf_spectacular.utils import extend_schema
 from rest_framework import status, viewsets
 from rest_framework.decorators import action, api_view
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import APIException, ValidationError
 from rest_framework.response import Response
 from redis import Redis
 from redis.exceptions import RedisError
@@ -25,6 +26,7 @@ from .serializers import (
     OrderCreateSerializer,
     OrderDetailSerializer,
     OrderSerializer,
+    OrderStatusHistorySerializer,
     OrderStatusUpdateSerializer,
     PaymentRequestSerializer,
     PaymentSerializer,
@@ -36,6 +38,23 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import OrderingFilter, SearchFilter
 
 logger = logging.getLogger(__name__)
+
+class ProductDeletionConflict(APIException):
+    status_code = status.HTTP_409_CONFLICT
+    default_detail = (
+        "This product cannot be deleted because it is referenced by inventory "
+        "or order history. Deactivate it instead."
+    )
+    default_code = "product_in_use"
+
+
+class WarehouseDeletionConflict(APIException):
+    status_code = status.HTTP_409_CONFLICT
+    default_detail = (
+        "This warehouse cannot be deleted because it is referenced by "
+        "inventory or order history."
+    )
+    default_code = "warehouse_in_use"
 
 @api_view(["GET"])
 def health_live(request):
@@ -152,6 +171,14 @@ class ProductViewSet(viewsets.ModelViewSet):
         'created_at',
     )
 
+    def perform_destroy(self, instance):
+        if instance.inventories.exists() or instance.order_items.exists():
+            raise ProductDeletionConflict()
+        try:
+            instance.delete()
+        except ProtectedError as exc:
+            raise ProductDeletionConflict() from exc
+
 class WarehouseViewSet(viewsets.ModelViewSet):
     queryset = Warehouse.objects.all().order_by("-created_at")
     serializer_class = WarehouseSerializer
@@ -172,6 +199,14 @@ class WarehouseViewSet(viewsets.ModelViewSet):
         "name",
         "created_at",
     )
+
+    def perform_destroy(self, instance):
+        if instance.inventories.exists() or instance.order_items.exists():
+            raise WarehouseDeletionConflict()
+        try:
+            instance.delete()
+        except ProtectedError as exc:
+            raise WarehouseDeletionConflict() from exc
 
 class InventoryViewSet(viewsets.ModelViewSet):
     queryset = Inventory.objects.all().select_related(
@@ -299,6 +334,16 @@ class OrderViewSet(viewsets.ModelViewSet):
             return OrderDetailSerializer
         return OrderSerializer
 
+    def perform_destroy(self, instance):
+        if (
+            instance.status_history.exists()
+            or instance.inventory_movements.exists()
+        ):
+            raise ValidationError(
+                {"order": "Orders with audit history cannot be deleted."}
+            )
+        super().perform_destroy(instance)
+
     @extend_schema(
         request=OrderCreateSerializer,
         responses={status.HTTP_201_CREATED: OrderSerializer},
@@ -336,6 +381,7 @@ class OrderViewSet(viewsets.ModelViewSet):
         order = transition_order_status(
             order,
             input_serializer.validated_data["status"],
+            performed_by=request.user,
         )
         order = self.get_queryset().get(pk=order.pk)
         response_serializer = OrderSerializer(
@@ -343,6 +389,19 @@ class OrderViewSet(viewsets.ModelViewSet):
             context=self.get_serializer_context(),
         )
         return Response(response_serializer.data)
+
+    @extend_schema(
+        responses={
+            status.HTTP_200_OK: OrderStatusHistorySerializer(many=True),
+        },
+    )
+    @action(detail=True, methods=("get",), url_path="history")
+    def history(self, request, *args, **kwargs):
+        order = self.get_object()
+        history = order.status_history.select_related(
+            "performed_by",
+        ).order_by("created_at", "pk")
+        return Response(OrderStatusHistorySerializer(history, many=True).data)
 
     @extend_schema(
         description=(
@@ -361,7 +420,10 @@ class OrderViewSet(viewsets.ModelViewSet):
         input_serializer = PaymentRequestSerializer(data=request.data)
         input_serializer.is_valid(raise_exception=True)
         order = self.get_object()
-        payment, created = process_payment(order)
+        payment, created = process_payment(
+            order,
+            performed_by=request.user,
+        )
         response_serializer = PaymentSerializer(payment)
         response_status = (
             status.HTTP_201_CREATED if created else status.HTTP_200_OK

@@ -363,12 +363,16 @@ export function ProductDetailPage() {
       >
         {deleteMutation.isError ? (
           <div className="mb-4">
-            <ErrorMessage error={deleteMutation.error} />
+            <ErrorMessage
+              error={deleteMutation.error}
+              title="Product could not be deleted"
+              fallbackMessage="The product could not be deleted. Please try again."
+            />
           </div>
         ) : null}
         <p className="text-sm leading-6 text-slate-600">
           Delete <strong dir="auto">{product.data.name}</strong>? Products referenced by
-          orders may be protected by the backend.
+          inventory or orders must be deactivated through Edit instead.
         </p>
         <div className="mt-6 flex justify-end gap-3">
           <Button

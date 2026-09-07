@@ -190,6 +190,19 @@ export interface OrderDetail extends Order {
   payment: Payment | null;
 }
 
+export interface OrderStatusHistoryActor {
+  id: number;
+  username: string;
+}
+
+export interface OrderStatusHistoryEntry {
+  id: number;
+  from_status: OrderStatus | null;
+  to_status: OrderStatus;
+  performed_by: OrderStatusHistoryActor | null;
+  created_at: string;
+}
+
 export interface Notification {
   id: number;
   user: number;

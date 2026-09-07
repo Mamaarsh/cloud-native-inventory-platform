@@ -25,7 +25,7 @@ def calculate_order_total(order):
     return total
 
 @transaction.atomic
-def process_payment(order):
+def process_payment(order, *, performed_by=None):
     logger.info("Payment processing started for order=%s", order.pk)
     locked_order = Order.objects.select_for_update().get(pk=order.pk)
     if locked_order.status in {
@@ -94,6 +94,7 @@ def process_payment(order):
         transition_order_status(
             locked_order,
             Order.Status.PROCESSING,
+            performed_by=performed_by,
         )
     if result.success:
         create_notification(

@@ -17,12 +17,27 @@ function firstMessage(value: unknown): string | undefined {
   return undefined;
 }
 
-export function getApiErrorMessage(error: unknown): string {
+export function getApiErrorMessage(
+  error: unknown,
+  fallbackMessage?: string,
+): string {
   if (!axios.isAxiosError(error)) {
-    return error instanceof Error ? error.message : "Something went wrong. Please try again.";
+    return fallbackMessage
+      ?? (error instanceof Error
+        ? error.message
+        : "Something went wrong. Please try again.");
   }
 
-  const backendMessage = firstMessage(error.response?.data);
+  const responseData: unknown = error.response?.data;
+  if (typeof responseData === "string") {
+    return fallbackMessage ?? (
+      error.response && error.response.status >= 500
+        ? "The server encountered an error. Please try again shortly."
+        : "The request could not be processed. Please try again."
+    );
+  }
+
+  const backendMessage = firstMessage(responseData);
   if (backendMessage) return backendMessage;
 
   switch (error.response?.status) {
@@ -35,9 +50,9 @@ export function getApiErrorMessage(error: unknown): string {
     case 404:
       return "The requested record was not found.";
     default:
-      return error.response && error.response.status >= 500
+      return fallbackMessage ?? (error.response && error.response.status >= 500
         ? "The server encountered an error. Please try again shortly."
-        : "Unable to reach the service. Check your connection and try again.";
+        : "Unable to reach the service. Check your connection and try again.");
   }
 }
 

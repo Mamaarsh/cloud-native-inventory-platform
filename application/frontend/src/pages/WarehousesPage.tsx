@@ -49,6 +49,11 @@ export function WarehousesPage() {
     updateMutation.reset();
   }
 
+  function closeDeleteModal(): void {
+    setDeleting(null);
+    deleteMutation.reset();
+  }
+
   async function saveWarehouse(event: React.FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     if (!form.name.trim() || !form.location.trim()) return;
@@ -64,9 +69,13 @@ export function WarehousesPage() {
 
   async function confirmDelete(): Promise<void> {
     if (!deleting) return;
-    await deleteMutation.mutateAsync(deleting.id);
-    setDeleting(null);
-    showSuccess("Warehouse deleted.");
+    try {
+      await deleteMutation.mutateAsync(deleting.id);
+      setDeleting(null);
+      showSuccess("Warehouse deleted.");
+    } catch {
+      // The mutation error remains visible in the confirmation modal.
+    }
   }
 
   const formError = createMutation.error ?? updateMutation.error;
@@ -131,10 +140,10 @@ export function WarehousesPage() {
           <div className="flex justify-end gap-3 border-t border-slate-200 pt-5"><Button variant="outline" onClick={closeForm}>Cancel</Button><Button type="submit" isLoading={createMutation.isPending || updateMutation.isPending}>{editing ? "Save changes" : "Create warehouse"}</Button></div>
         </form>
       </Modal>
-      <Modal open={Boolean(deleting)} onClose={() => { setDeleting(null); deleteMutation.reset(); }} title="Delete warehouse" description="Inventory relationships may prevent deletion." size="sm" isBusy={deleteMutation.isPending}>
-        {deleteMutation.isError ? <div className="mb-4"><ErrorMessage error={deleteMutation.error} /></div> : null}
-        <p className="text-sm text-slate-600">Are you sure you want to delete <strong>{deleting?.name}</strong>?</p>
-        <div className="mt-6 flex justify-end gap-3"><Button variant="outline" disabled={deleteMutation.isPending} onClick={() => setDeleting(null)}>Cancel</Button><Button data-modal-destructive="true" variant="danger" isLoading={deleteMutation.isPending} onClick={() => void confirmDelete()}>Delete warehouse</Button></div>
+      <Modal open={Boolean(deleting)} onClose={closeDeleteModal} title="Delete warehouse" description="Only warehouses that have never been used can be deleted." size="sm" isBusy={deleteMutation.isPending}>
+        {deleteMutation.isError ? <div className="mb-4"><ErrorMessage error={deleteMutation.error} title="Warehouse could not be deleted" fallbackMessage="The warehouse could not be deleted. Please try again." /></div> : null}
+        <p className="text-sm text-slate-600">Delete <strong>{deleting?.name}</strong>? Warehouses referenced by inventory or orders must be retained.</p>
+        <div className="mt-6 flex justify-end gap-3"><Button variant="outline" disabled={deleteMutation.isPending} onClick={closeDeleteModal}>Cancel</Button><Button data-modal-destructive="true" variant="danger" isLoading={deleteMutation.isPending} onClick={() => void confirmDelete()}>Delete warehouse</Button></div>
       </Modal>
     </>
   );

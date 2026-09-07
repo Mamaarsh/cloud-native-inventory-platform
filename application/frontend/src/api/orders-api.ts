@@ -4,6 +4,7 @@ import type {
   OrderCreateRequest,
   OrderDetail,
   OrderQueryParams,
+  OrderStatusHistoryEntry,
   OrderStatusRequest,
   PaginatedResponse,
   Payment,
@@ -18,6 +19,15 @@ export async function listOrders(params: OrderQueryParams = {}): Promise<Paginat
 
 export async function getOrder(id: number): Promise<OrderDetail> {
   const { data } = await apiClient.get<OrderDetail>(`${path}${id}/`);
+  return data;
+}
+
+export async function getOrderHistory(
+  id: number,
+): Promise<OrderStatusHistoryEntry[]> {
+  const { data } = await apiClient.get<OrderStatusHistoryEntry[]>(
+    `${path}${id}/history/`,
+  );
   return data;
 }
 
