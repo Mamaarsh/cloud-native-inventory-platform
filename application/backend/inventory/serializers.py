@@ -137,6 +137,21 @@ class OrderItemSerializer(serializers.ModelSerializer):
         )
         read_only_fields = fields
 
+class PaymentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Payment
+        fields = (
+            "id",
+            "order",
+            "amount",
+            "status",
+            "provider",
+            "provider_reference",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = fields
+
 class OrderSerializer(serializers.ModelSerializer):
     user = OrderUserSerializer(read_only=True)
     items = OrderItemSerializer(
@@ -169,6 +184,13 @@ class OrderSerializer(serializers.ModelSerializer):
                 {"status": "Use the change-status endpoint to update status."}
             )
         return attrs
+
+class OrderDetailSerializer(OrderSerializer):
+    payment = PaymentSerializer(read_only=True)
+
+    class Meta(OrderSerializer.Meta):
+        fields = OrderSerializer.Meta.fields + ("payment",)
+        read_only_fields = fields
 
 class OrderItemCreateSerializer(serializers.Serializer):
     product = serializers.PrimaryKeyRelatedField(
@@ -205,18 +227,3 @@ class PaymentRequestSerializer(serializers.Serializer):
             }
             raise serializers.ValidationError(errors)
         return attrs
-
-class PaymentSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Payment
-        fields = (
-            "id",
-            "order",
-            "amount",
-            "status",
-            "provider",
-            "provider_reference",
-            "created_at",
-            "updated_at",
-        )
-        read_only_fields = fields

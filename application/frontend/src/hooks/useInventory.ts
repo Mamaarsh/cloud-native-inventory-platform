@@ -13,11 +13,15 @@ export const inventoryKeys = {
   list: (params: InventoryQueryParams) => [...inventoryKeys.lists(), params] as const,
 };
 
-export function useInventory(params: InventoryQueryParams = {}) {
+export function useInventory(
+  params: InventoryQueryParams = {},
+  enabled = true,
+) {
   return useQuery({
     queryKey: inventoryKeys.list(params),
     queryFn: () => listInventory(params),
     placeholderData: keepPreviousData,
+    enabled,
   });
 }
 

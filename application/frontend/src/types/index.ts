@@ -157,6 +157,10 @@ export interface Payment {
   updated_at: string;
 }
 
+export interface OrderDetail extends Order {
+  payment: Payment | null;
+}
+
 export interface Notification {
   id: number;
   user: number;

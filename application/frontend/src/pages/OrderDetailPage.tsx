@@ -14,7 +14,14 @@ import { useChangeOrderStatus, useOrder, usePayOrder } from "@/hooks/useOrders";
 import { useSuccessFeedback } from "@/hooks/useSuccessFeedback";
 import { formatCurrency, formatDate, titleCase } from "@/lib/format";
 import { allowedStatusTransitions } from "@/lib/order-status";
-import { OrderStatus, ROLES } from "@/types";
+import { OrderStatus, PaymentStatus, ROLES } from "@/types";
+
+const paymentPanelStyles: Record<PaymentStatus, string> = {
+  [PaymentStatus.Pending]: "border-amber-200 bg-amber-50 text-amber-900",
+  [PaymentStatus.Succeeded]: "border-emerald-200 bg-emerald-50 text-emerald-900",
+  [PaymentStatus.Failed]: "border-rose-200 bg-rose-50 text-rose-900",
+  [PaymentStatus.Refunded]: "border-slate-200 bg-slate-100 text-slate-800",
+};
 
 export function OrderDetailPage() {
   const { id: idParam } = useParams();
@@ -33,7 +40,11 @@ export function OrderDetailPage() {
 
   const total = order.data.items.reduce((sum, item) => sum + Number(item.unit_price) * item.quantity, 0);
   const transitions = allowedStatusTransitions(order.data.status, hasRole(ROLES.admin), hasRole(ROLES.warehouseManager));
-  const canPay = hasRole(ROLES.admin) && ![OrderStatus.Delivered, OrderStatus.Cancelled].includes(order.data.status);
+  const payment = order.data.payment;
+  const paymentSucceeded = payment?.status === PaymentStatus.Succeeded;
+  const canPay = hasRole(ROLES.admin)
+    && !paymentSucceeded
+    && ![OrderStatus.Delivered, OrderStatus.Cancelled].includes(order.data.status);
   const pendingTransition = statusMutation.isPending ? statusMutation.variables?.status : undefined;
 
   async function changeStatus(status: OrderStatus): Promise<void> {
@@ -57,7 +68,26 @@ export function OrderDetailPage() {
       />
       {statusMutation.isError ? <div className="mb-5"><ErrorMessage error={statusMutation.error} title="Status could not be changed" /></div> : null}
       {paymentMutation.isError ? <div className="mb-5"><ErrorMessage error={paymentMutation.error} title="Payment could not be processed" /></div> : null}
-      {paymentMutation.data ? <div className="mb-5 flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-800"><CheckCircle2 className="mt-0.5 size-5" /><div><p className="font-bold">Payment {titleCase(paymentMutation.data.status)}</p><p className="mt-1 text-sm">{formatCurrency(paymentMutation.data.amount)} via {paymentMutation.data.provider}{paymentMutation.data.provider_reference ? ` · ${paymentMutation.data.provider_reference}` : ""}</p></div></div> : null}
+      {payment ? (
+        <div
+          className={`mb-5 flex items-start gap-3 rounded-2xl border p-4 ${paymentPanelStyles[payment.status]}`}
+          role="status"
+        >
+          {paymentSucceeded ? (
+            <CheckCircle2 className="mt-0.5 size-5 shrink-0" aria-hidden="true" />
+          ) : (
+            <CreditCard className="mt-0.5 size-5 shrink-0" aria-hidden="true" />
+          )}
+          <div>
+            <p className="font-bold">Payment {titleCase(payment.status)}</p>
+            <p className="mt-1 text-sm">
+              {formatCurrency(payment.amount)} via {payment.provider}
+              {payment.provider_reference ? ` · ${payment.provider_reference}` : ""}
+            </p>
+            <p className="mt-1 text-xs opacity-75">Recorded {formatDate(payment.created_at)}</p>
+          </div>
+        </div>
+      ) : null}
       <div className="grid gap-6 xl:grid-cols-[1fr_340px]">
         <Card className="overflow-hidden">
           <div className="border-b border-slate-200 bg-slate-50/70 px-6 py-5"><h3 className="font-bold text-slate-950">Order items</h3><p className="mt-1 text-xs text-slate-500">Unit prices are historical snapshots captured at creation.</p></div>

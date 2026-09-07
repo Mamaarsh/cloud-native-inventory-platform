@@ -19,6 +19,7 @@ from .models import Inventory, Order, OrderItem, Product, Warehouse
 from .serializers import (
     InventorySerializer,
     OrderCreateSerializer,
+    OrderDetailSerializer,
     OrderSerializer,
     OrderStatusUpdateSerializer,
     PaymentRequestSerializer,
@@ -229,9 +230,17 @@ class OrderViewSet(viewsets.ModelViewSet):
         "status",
     )
 
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        if self.action == "retrieve":
+            return queryset.select_related("payment")
+        return queryset
+
     def get_serializer_class(self):
         if self.action == "create":
             return OrderCreateSerializer
+        if self.action == "retrieve":
+            return OrderDetailSerializer
         return OrderSerializer
 
     @extend_schema(

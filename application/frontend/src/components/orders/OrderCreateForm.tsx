@@ -17,22 +17,40 @@ interface OrderCreateFormProps {
   serverError?: unknown;
 }
 
-const emptyItem = (): OrderItemCreateRequest => ({ product: 0, warehouse: 0, quantity: 1 });
+interface OrderItemFormValue extends Omit<OrderItemCreateRequest, "quantity"> {
+  quantity: string;
+}
+
+const emptyItem = (): OrderItemFormValue => ({
+  product: 0,
+  warehouse: 0,
+  quantity: "",
+});
+
+function isValidQuantity(value: string): boolean {
+  if (!value.trim()) return false;
+  const quantity = Number(value);
+  return Number.isInteger(quantity) && quantity >= 1;
+}
 
 export function OrderCreateForm({ onSubmit, onCancel, isSubmitting, serverError }: OrderCreateFormProps) {
-  const [items, setItems] = useState<OrderItemCreateRequest[]>([emptyItem()]);
+  const [items, setItems] = useState<OrderItemFormValue[]>([emptyItem()]);
   const [validationError, setValidationError] = useState<string | null>(null);
   const products = useAllProducts();
   const warehouses = useAllWarehouses();
   const activeProducts = products.data?.filter((product) => product.is_active) ?? [];
 
-  function updateItem(index: number, patch: Partial<OrderItemCreateRequest>): void {
+  function updateItem(index: number, patch: Partial<OrderItemFormValue>): void {
     setItems((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item));
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
-    if (items.some((item) => item.product <= 0 || item.warehouse <= 0 || item.quantity <= 0)) {
+    if (items.some((item) => (
+      item.product <= 0
+      || item.warehouse <= 0
+      || !isValidQuantity(item.quantity)
+    ))) {
       setValidationError("Choose a product and warehouse and enter a quantity greater than zero for every item.");
       return;
     }
@@ -42,7 +60,12 @@ export function OrderCreateForm({ onSubmit, onCancel, isSubmitting, serverError 
       return;
     }
     setValidationError(null);
-    await onSubmit({ items });
+    await onSubmit({
+      items: items.map((item) => ({
+        ...item,
+        quantity: Number(item.quantity),
+      })),
+    });
   }
 
   if (products.isPending || warehouses.isPending) {
@@ -77,7 +100,7 @@ export function OrderCreateForm({ onSubmit, onCancel, isSubmitting, serverError 
                   ) : null}
                 </div>
                 <Select label="Warehouse" dir="auto" value={item.warehouse || ""} onChange={(event) => updateItem(index, { warehouse: Number(event.target.value) })} required><option value="">Choose warehouse</option>{warehouses.data?.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</Select>
-                <Input label="Quantity" type="number" min="1" step="1" value={item.quantity} onChange={(event) => updateItem(index, { quantity: Number(event.target.value) })} required />
+                <Input label="Quantity" type="number" min="1" step="1" inputMode="numeric" value={item.quantity} onChange={(event) => updateItem(index, { quantity: event.target.value })} required />
               </div>
             </div>
           );

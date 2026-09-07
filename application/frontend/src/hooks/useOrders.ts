@@ -6,7 +6,12 @@ import {
   listOrders,
   payOrder,
 } from "@/api/orders-api";
-import type { OrderCreateRequest, OrderQueryParams, OrderStatus } from "@/types";
+import type {
+  OrderCreateRequest,
+  OrderDetail,
+  OrderQueryParams,
+  OrderStatus,
+} from "@/types";
 
 export const orderKeys = {
   all: ["orders"] as const,
@@ -36,7 +41,10 @@ export function useCreateOrder() {
   return useMutation({
     mutationFn: (payload: OrderCreateRequest) => createOrder(payload),
     onSuccess: async (order) => {
-      queryClient.setQueryData(orderKeys.detail(order.id), order);
+      queryClient.setQueryData<OrderDetail>(orderKeys.detail(order.id), {
+        ...order,
+        payment: null,
+      });
       await queryClient.invalidateQueries({ queryKey: orderKeys.lists() });
     },
   });
@@ -48,8 +56,10 @@ export function useChangeOrderStatus() {
     mutationFn: ({ id, status }: { id: number; status: OrderStatus }) =>
       changeOrderStatus(id, { status }),
     onSuccess: async (order) => {
-      queryClient.setQueryData(orderKeys.detail(order.id), order);
-      await queryClient.invalidateQueries({ queryKey: orderKeys.lists() });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: orderKeys.detail(order.id) }),
+        queryClient.invalidateQueries({ queryKey: orderKeys.lists() }),
+      ]);
     },
   });
 }
@@ -59,9 +69,10 @@ export function usePayOrder() {
   return useMutation({
     mutationFn: payOrder,
     onSuccess: async (payment) => {
-      queryClient.setQueryData(["payments", payment.order], payment);
-      await queryClient.invalidateQueries({ queryKey: orderKeys.detail(payment.order) });
-      await queryClient.invalidateQueries({ queryKey: orderKeys.lists() });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: orderKeys.detail(payment.order) }),
+        queryClient.invalidateQueries({ queryKey: orderKeys.lists() }),
+      ]);
     },
   });
 }

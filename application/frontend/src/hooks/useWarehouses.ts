@@ -32,11 +32,12 @@ export function useWarehouse(id: number) {
   });
 }
 
-export function useAllWarehouses() {
+export function useAllWarehouses(enabled = true) {
   return useQuery({
     queryKey: [...warehouseKeys.all, "all-options"],
     queryFn: listAllWarehouses,
     staleTime: 5 * 60 * 1000,
+    enabled,
   });
 }
 

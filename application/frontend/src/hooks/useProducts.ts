@@ -65,6 +65,9 @@ export function useDeleteProduct() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: deleteProduct,
-    onSuccess: async () => queryClient.invalidateQueries({ queryKey: productKeys.all }),
+    onSuccess: async (_, productId) => {
+      queryClient.removeQueries({ queryKey: productKeys.detail(productId) });
+      await queryClient.invalidateQueries({ queryKey: productKeys.all });
+    },
   });
 }

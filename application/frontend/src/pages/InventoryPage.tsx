@@ -26,6 +26,7 @@ import { useSuccessFeedback } from "@/hooks/useSuccessFeedback";
 import { useAllProducts } from "@/hooks/useProducts";
 import { useAllWarehouses } from "@/hooks/useWarehouses";
 import { formatDate } from "@/lib/format";
+import { getInventoryStatus } from "@/lib/inventory-status";
 import type { Inventory, InventoryRequest } from "@/types";
 import { ROLES } from "@/types";
 
@@ -230,6 +231,7 @@ export function InventoryPage() {
                   {inventory.data.results.map((item) => {
                     const productRecord = productMap.get(item.product);
                     const warehouseRecord = warehouseMap.get(item.warehouse);
+                    const stockStatus = getInventoryStatus(item.quantity);
 
                     return (
                       <tr key={item.id} className="transition-colors hover:bg-brand-50/35 motion-reduce:transition-none">
@@ -258,14 +260,8 @@ export function InventoryPage() {
                           {item.quantity.toLocaleString()}
                         </td>
                         <td className="px-6 py-4">
-                          <Badge
-                            tone={item.quantity === 0 ? "red" : item.quantity < 10 ? "amber" : "green"}
-                          >
-                            {item.quantity === 0
-                              ? "Out of stock"
-                              : item.quantity < 10
-                                ? "Low stock"
-                                : "In stock"}
+                          <Badge tone={stockStatus.tone}>
+                            {stockStatus.label}
                           </Badge>
                         </td>
                         <td className="px-6 py-4 text-sm text-slate-500">

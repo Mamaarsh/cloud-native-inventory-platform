@@ -1,16 +1,74 @@
-node_modules
-dist
+# =========================
+# Node.js Dependencies
+# =========================
+
+node_modules/
+
+# =========================
+# Build Output
+# =========================
+
+dist/
+.vite/
+*.tsbuildinfo
+
+# =========================
+# Environment Variables
+# =========================
 
 .env
 .env.*
 
-.git
+# Keep example environment file if needed
+!.env.example
+
+# =========================
+# Package Manager Logs
+# =========================
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# =========================
+# Testing / Coverage
+# =========================
+
+coverage/
+
+# =========================
+# Git
+# =========================
+
+.git/
 .gitignore
 
-.vscode
-.idea
+# =========================
+# IDE / Editors
+# =========================
 
-npm-debug.log
+.vscode/
+.idea/
+*.swp
+*.swo
 
-Dockerfile
+# =========================
+# Operating System
+# =========================
+
+.DS_Store
+Thumbs.db
+
+# =========================
+# Local / Temporary Files
+# =========================
+
+*.tmp
+*.bak
+
+# =========================
+# Documentation / Local Files
+# =========================
+
 README.md

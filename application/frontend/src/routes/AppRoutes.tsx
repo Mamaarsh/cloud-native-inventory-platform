@@ -9,6 +9,7 @@ import { LoginPage } from "@/pages/LoginPage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
 import { OrderDetailPage } from "@/pages/OrderDetailPage";
 import { OrdersPage } from "@/pages/OrdersPage";
+import { ProductDetailPage } from "@/pages/ProductDetailPage";
 import { ProductsPage } from "@/pages/ProductsPage";
 import { RegisterPage } from "@/pages/RegisterPage";
 import { UsersPage } from "@/pages/UsersPage";
@@ -25,6 +26,7 @@ export function AppRoutes() {
           <Route index element={<DashboardPage />} />
           <Route path="account" element={<AccountPage />} />
           <Route path="products" element={<ProductsPage />} />
+          <Route path="products/:id" element={<ProductDetailPage />} />
           <Route path="warehouses" element={<WarehousesPage />} />
           <Route path="inventory" element={<InventoryPage />} />
           <Route path="orders" element={<OrdersPage />} />

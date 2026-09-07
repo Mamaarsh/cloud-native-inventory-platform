@@ -2,6 +2,7 @@ import { apiClient } from "@/api/client";
 import type {
   Order,
   OrderCreateRequest,
+  OrderDetail,
   OrderQueryParams,
   OrderStatusRequest,
   PaginatedResponse,
@@ -15,8 +16,8 @@ export async function listOrders(params: OrderQueryParams = {}): Promise<Paginat
   return data;
 }
 
-export async function getOrder(id: number): Promise<Order> {
-  const { data } = await apiClient.get<Order>(`${path}${id}/`);
+export async function getOrder(id: number): Promise<OrderDetail> {
+  const { data } = await apiClient.get<OrderDetail>(`${path}${id}/`);
   return data;
 }
 

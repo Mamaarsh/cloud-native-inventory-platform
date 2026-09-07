@@ -7,13 +7,14 @@ from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.db import close_old_connections
+from django.db import close_old_connections, connection
 from django.db import IntegrityError, OperationalError
 from django.test import (
     TransactionTestCase,
     override_settings,
     skipUnlessDBFeature,
 )
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from PIL import Image
 from rest_framework import status
@@ -83,6 +84,9 @@ class PaymentAPITests(APITestCase):
             {} if data is None else data,
             format="json",
         )
+
+    def detail(self, order):
+        return self.client.get(reverse("order-detail", args=(order.pk,)))
 
     def test_pending_order_can_be_paid_successfully(self):
         order = self.create_order()
@@ -205,6 +209,152 @@ class PaymentAPITests(APITestCase):
                 "created_at",
                 "updated_at",
             },
+        )
+
+    def test_unpaid_order_detail_has_null_payment(self):
+        order = self.create_order()
+
+        response = self.detail(order)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIsNone(response.json()["payment"])
+
+    def test_successful_payment_persists_in_order_detail(self):
+        order = self.create_order()
+        payment_response = self.pay(order)
+
+        response = self.detail(order)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        payment = response.json()["payment"]
+        self.assertSetEqual(
+            set(payment),
+            {
+                "id",
+                "order",
+                "amount",
+                "status",
+                "provider",
+                "provider_reference",
+                "created_at",
+                "updated_at",
+            },
+        )
+        self.assertEqual(payment["id"], payment_response.json()["id"])
+        self.assertEqual(payment["order"], order.pk)
+        self.assertEqual(payment["amount"], "260.00")
+        self.assertEqual(payment["status"], Payment.Status.SUCCEEDED)
+        self.assertEqual(payment["provider"], "mock")
+        self.assertEqual(
+            payment["provider_reference"],
+            payment_response.json()["provider_reference"],
+        )
+
+    def test_failed_payment_is_exposed_and_remains_payable(self):
+        order = self.create_order()
+        with patch(
+            "inventory.services.payments.mock_payment_provider.charge",
+            return_value=PaymentProviderResult(
+                success=False,
+                provider_reference="mock_failed_detail",
+            ),
+        ) as mocked_failure:
+            failed_response = self.pay(order)
+
+        response = self.detail(order)
+
+        self.assertEqual(failed_response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response.json()["payment"]["status"],
+            Payment.Status.FAILED,
+        )
+        mocked_failure.assert_called_once()
+
+        with patch(
+            "inventory.services.payments.mock_payment_provider.charge",
+            return_value=PaymentProviderResult(
+                success=True,
+                provider_reference="mock_retry_succeeded",
+            ),
+        ) as mocked_retry:
+            retry_response = self.pay(order)
+
+        self.assertEqual(retry_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            retry_response.json()["id"],
+            failed_response.json()["id"],
+        )
+        self.assertEqual(
+            retry_response.json()["status"],
+            Payment.Status.SUCCEEDED,
+        )
+        mocked_retry.assert_called_once()
+
+    def test_payment_fields_cannot_be_changed_through_order_patch(self):
+        order = self.create_order()
+        self.pay(order)
+        payment = Payment.objects.get(order=order)
+        original_values = (
+            payment.status,
+            payment.amount,
+            payment.provider,
+            payment.provider_reference,
+        )
+
+        response = self.client.patch(
+            reverse("order-detail", args=(order.pk,)),
+            {
+                "payment": {
+                    "status": Payment.Status.REFUNDED,
+                    "amount": "1.00",
+                    "provider": "client-controlled",
+                    "provider_reference": "client-controlled",
+                }
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        payment.refresh_from_db()
+        self.assertEqual(
+            (
+                payment.status,
+                payment.amount,
+                payment.provider,
+                payment.provider_reference,
+            ),
+            original_values,
+        )
+
+    def test_non_admin_cannot_use_pay_action(self):
+        operator_group, _ = Group.objects.get_or_create(name="Operator")
+        operator = get_user_model().objects.create_user(
+            username="payment-operator"
+        )
+        operator.groups.add(operator_group)
+        order = self.create_order()
+        self.client.force_authenticate(operator)
+
+        response = self.pay(order)
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertFalse(Payment.objects.filter(order=order).exists())
+
+    def test_order_detail_joins_payment_without_a_separate_query(self):
+        order = self.create_order()
+        self.pay(order)
+
+        with CaptureQueriesContext(connection) as query_context:
+            response = self.detail(order)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        statements = [query["sql"] for query in query_context.captured_queries]
+        self.assertTrue(
+            any('JOIN "inventory_payment"' in sql for sql in statements)
+        )
+        self.assertFalse(
+            any('FROM "inventory_payment"' in sql for sql in statements)
         )
 
 class PaymentConcurrencyTests(TransactionTestCase):
