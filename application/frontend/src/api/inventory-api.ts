@@ -1,6 +1,8 @@
 import { apiClient } from "@/api/client";
 import type {
   Inventory,
+  InventoryAdjustmentRequest,
+  InventoryMovement,
   InventoryQueryParams,
   InventoryRequest,
   PaginatedResponse,
@@ -28,4 +30,26 @@ export async function updateInventory(
 
 export async function deleteInventory(id: number): Promise<void> {
   await apiClient.delete(`${path}${id}/`);
+}
+
+export async function adjustInventory(
+  id: number,
+  payload: InventoryAdjustmentRequest,
+): Promise<InventoryMovement> {
+  const { data } = await apiClient.post<InventoryMovement>(
+    `${path}${id}/adjust/`,
+    payload,
+  );
+  return data;
+}
+
+export async function listInventoryMovements(
+  id: number,
+  page: number,
+): Promise<PaginatedResponse<InventoryMovement>> {
+  const { data } = await apiClient.get<PaginatedResponse<InventoryMovement>>(
+    `${path}${id}/movements/`,
+    { params: { page } },
+  );
+  return data;
 }

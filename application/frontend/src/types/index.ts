@@ -101,6 +101,35 @@ export interface Inventory {
   updated_at: string;
 }
 
+export enum InventoryMovementType {
+  InitialStock = "initial_stock",
+  ManualAdjustment = "manual_adjustment",
+  OrderDeduction = "order_deduction",
+}
+
+export interface InventoryMovementActor {
+  id: number;
+  username: string;
+}
+
+export interface InventoryMovement {
+  id: number;
+  inventory: number;
+  movement_type: InventoryMovementType;
+  quantity_delta: number;
+  quantity_before: number;
+  quantity_after: number;
+  reason: string;
+  order_id: number | null;
+  performed_by: InventoryMovementActor | null;
+  created_at: string;
+}
+
+export interface InventoryAdjustmentRequest {
+  quantity_delta: number;
+  reason: string;
+}
+
 export enum OrderStatus {
   Pending = "pending",
   Processing = "processing",

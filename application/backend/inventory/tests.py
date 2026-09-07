@@ -1413,16 +1413,16 @@ class InventoryRBACAPITests(APITestCase):
         self.inventory.refresh_from_db()
         self.assertEqual(self.inventory.quantity, 10)
 
-    def test_warehouse_manager_can_update_inventory(self):
+    def test_warehouse_manager_cannot_bypass_inventory_adjustment(self):
         self.client.force_authenticate(self.warehouse_manager)
         response = self.client.patch(
             reverse("inventory-detail", args=(self.inventory.pk,)),
             {"quantity": 20},
             format="json",
         )
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.inventory.refresh_from_db()
-        self.assertEqual(self.inventory.quantity, 20)
+        self.assertEqual(self.inventory.quantity, 10)
 
     def test_auditor_can_read_inventory(self):
         self.client.force_authenticate(self.auditor)

@@ -12,14 +12,12 @@ APPLICATION_ROLES = (
     AUDITOR,
 )
 
-
 def _has_any_role(user, *role_names, allow_superuser=True):
     if not user or not user.is_authenticated:
         return False
     if allow_superuser and user.is_superuser:
         return True
     return user.groups.filter(name__in=role_names).exists()
-
 
 class _IsRole(BasePermission):
     role_name = None
@@ -32,15 +30,12 @@ class _IsRole(BasePermission):
             allow_superuser=self.allow_superuser,
         )
 
-
 class IsAdmin(_IsRole):
     role_name = ADMIN
-
 
 class IsApplicationAdmin(_IsRole):
     role_name = ADMIN
     allow_superuser = False
-
 
 class IsWarehouseManager(_IsRole):
     role_name = WAREHOUSE_MANAGER
@@ -93,6 +88,10 @@ class InventoryPermission(BasePermission):
         if request.method == "DELETE":
             return _has_any_role(request.user, ADMIN)
         return False
+
+class InventoryAdjustmentPermission(BasePermission):
+    def has_permission(self, request, view):
+        return _has_any_role(request.user, ADMIN, WAREHOUSE_MANAGER)
 
 class OrderPermission(BasePermission):
     def has_permission(self, request, view):

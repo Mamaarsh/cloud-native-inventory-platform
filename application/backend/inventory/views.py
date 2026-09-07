@@ -5,10 +5,12 @@ from django.db.models import Prefetch
 from drf_spectacular.utils import extend_schema
 from rest_framework import status, viewsets
 from rest_framework.decorators import action, api_view
+from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from redis import Redis
 from redis.exceptions import RedisError
 from users.permissions import (
+    InventoryAdjustmentPermission,
     InventoryPermission,
     OrderPermission,
     OrderStatusPermission,
@@ -17,6 +19,8 @@ from users.permissions import (
 )
 from .models import Inventory, Order, OrderItem, Product, Warehouse
 from .serializers import (
+    InventoryAdjustmentSerializer,
+    InventoryMovementSerializer,
     InventorySerializer,
     OrderCreateSerializer,
     OrderDetailSerializer,
@@ -27,7 +31,7 @@ from .serializers import (
     ProductSerializer,
     WarehouseSerializer,
 )
-from .services import process_payment, transition_order_status
+from .services import adjust_inventory, process_payment, transition_order_status
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import OrderingFilter, SearchFilter
 
@@ -194,6 +198,58 @@ class InventoryViewSet(viewsets.ModelViewSet):
         "quantity",
         "updated_at",
     )
+
+    def perform_destroy(self, instance):
+        if instance.movements.exists():
+            raise ValidationError(
+                {
+                    "inventory": (
+                        "Inventory with movement history cannot be deleted."
+                    )
+                }
+            )
+        super().perform_destroy(instance)
+
+    @extend_schema(
+        request=InventoryAdjustmentSerializer,
+        responses={status.HTTP_201_CREATED: InventoryMovementSerializer},
+    )
+    @action(
+        detail=True,
+        methods=("post",),
+        url_path="adjust",
+        permission_classes=(InventoryAdjustmentPermission,),
+    )
+    def adjust(self, request, *args, **kwargs):
+        input_serializer = InventoryAdjustmentSerializer(data=request.data)
+        input_serializer.is_valid(raise_exception=True)
+        inventory = self.get_object()
+        _, movement = adjust_inventory(
+            inventory=inventory,
+            quantity_delta=input_serializer.validated_data["quantity_delta"],
+            performed_by=request.user,
+            reason=input_serializer.validated_data["reason"],
+        )
+        return Response(
+            InventoryMovementSerializer(movement).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    @extend_schema(
+        responses={status.HTTP_200_OK: InventoryMovementSerializer(many=True)},
+    )
+    @action(detail=True, methods=("get",), url_path="movements")
+    def movements(self, request, *args, **kwargs):
+        inventory = self.get_object()
+        queryset = inventory.movements.select_related(
+            "performed_by",
+            "order",
+        ).order_by("-created_at", "-pk")
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = InventoryMovementSerializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        return Response(InventoryMovementSerializer(queryset, many=True).data)
 
 class OrderViewSet(viewsets.ModelViewSet):
     queryset = Order.objects.all().select_related(

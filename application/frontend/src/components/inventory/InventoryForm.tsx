@@ -6,10 +6,9 @@ import { Select } from "@/components/ui/Select";
 import { Spinner } from "@/components/ui/Spinner";
 import { useAllProducts } from "@/hooks/useProducts";
 import { useAllWarehouses } from "@/hooks/useWarehouses";
-import type { Inventory, InventoryRequest } from "@/types";
+import type { InventoryRequest } from "@/types";
 
 interface InventoryFormProps {
-  inventory?: Inventory;
   onSubmit: (payload: InventoryRequest) => Promise<void>;
   onCancel: () => void;
   isSubmitting: boolean;
@@ -21,20 +20,19 @@ type InventoryFormErrors = Partial<Record<keyof InventoryRequest, string>>;
 interface InventoryFormValues {
   product: number;
   warehouse: number;
-  quantity: number | "";
+  quantity: string;
 }
 
 export function InventoryForm({
-  inventory,
   onSubmit,
   onCancel,
   isSubmitting,
   serverError,
 }: InventoryFormProps) {
   const [form, setForm] = useState<InventoryFormValues>({
-    product: inventory?.product ?? 0,
-    warehouse: inventory?.warehouse ?? 0,
-    quantity: inventory?.quantity ?? 0,
+    product: 0,
+    warehouse: 0,
+    quantity: "",
   });
   const [errors, setErrors] = useState<InventoryFormErrors>({});
   const products = useAllProducts();
@@ -44,7 +42,12 @@ export function InventoryForm({
     const nextErrors: InventoryFormErrors = {};
     if (form.product <= 0) nextErrors.product = "Select a product.";
     if (form.warehouse <= 0) nextErrors.warehouse = "Select a warehouse.";
-    if (form.quantity === "" || !Number.isInteger(form.quantity) || form.quantity < 0) {
+    const quantity = Number(form.quantity);
+    if (
+      !form.quantity.trim()
+      || !Number.isInteger(quantity)
+      || quantity < 0
+    ) {
       nextErrors.quantity = "Quantity must be a non-negative whole number.";
     }
     setErrors(nextErrors);
@@ -129,7 +132,7 @@ export function InventoryForm({
         onChange={(event) => {
           setForm({
             ...form,
-            quantity: event.target.value === "" ? "" : Number(event.target.value),
+            quantity: event.target.value,
           });
           setErrors((current) => ({ ...current, quantity: undefined }));
         }}
@@ -144,7 +147,7 @@ export function InventoryForm({
           Cancel
         </Button>
         <Button type="submit" isLoading={isSubmitting}>
-          {inventory ? "Save changes" : "Add inventory"}
+          Add inventory
         </Button>
       </div>
     </form>

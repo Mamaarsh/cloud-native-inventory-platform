@@ -1,9 +1,17 @@
 from functools import partial
-
 from django.db import transaction
 from rest_framework import serializers
-from .models import Inventory, Order, OrderItem, Payment, Product, Warehouse
-from .services import create_order
+from .models import (
+    Inventory,
+    InventoryMovement,
+    Order,
+    OrderItem,
+    Payment,
+    Product,
+    Warehouse,
+)
+from .services import adjust_inventory, create_order
+from .services.stock import MAX_INVENTORY_QUANTITY
 from .validators import validate_product_image
 
 class ProductSerializer(serializers.ModelSerializer):
@@ -90,6 +98,11 @@ class WarehouseSerializer(serializers.ModelSerializer):
         )
 
 class InventorySerializer(serializers.ModelSerializer):
+    quantity = serializers.IntegerField(
+        min_value=0,
+        max_value=MAX_INVENTORY_QUANTITY,
+    )
+
     class Meta:
         model = Inventory
         fields = "__all__"
@@ -97,6 +110,94 @@ class InventorySerializer(serializers.ModelSerializer):
             "id",
             "updated_at",
         )
+
+    def validate(self, attrs):
+        if self.instance is not None:
+            protected_fields = {
+                field: (
+                    "Inventory identity and quantity cannot be changed here. "
+                    "Use the adjust endpoint for stock changes."
+                )
+                for field in ("product", "warehouse", "quantity")
+                if field in self.initial_data
+            }
+            if protected_fields:
+                raise serializers.ValidationError(protected_fields)
+        return attrs
+
+    @transaction.atomic
+    def create(self, validated_data):
+        initial_quantity = validated_data.pop("quantity", 0)
+        inventory = Inventory.objects.create(
+            quantity=0,
+            **validated_data,
+        )
+        if initial_quantity > 0:
+            inventory, _ = adjust_inventory(
+                inventory=inventory,
+                quantity_delta=initial_quantity,
+                movement_type=InventoryMovement.Type.INITIAL_STOCK,
+                performed_by=self.context["request"].user,
+                reason="Initial quantity recorded when inventory was created.",
+            )
+        return inventory
+
+class InventoryMovementUserSerializer(serializers.Serializer):
+    id = serializers.IntegerField(read_only=True)
+    username = serializers.CharField(read_only=True)
+
+class InventoryMovementSerializer(serializers.ModelSerializer):
+    performed_by = InventoryMovementUserSerializer(read_only=True)
+    order_id = serializers.IntegerField(read_only=True, allow_null=True)
+
+    class Meta:
+        model = InventoryMovement
+        fields = (
+            "id",
+            "inventory",
+            "movement_type",
+            "quantity_delta",
+            "quantity_before",
+            "quantity_after",
+            "reason",
+            "order_id",
+            "performed_by",
+            "created_at",
+        )
+        read_only_fields = fields
+
+class InventoryAdjustmentSerializer(serializers.Serializer):
+    quantity_delta = serializers.IntegerField(
+        min_value=-MAX_INVENTORY_QUANTITY,
+        max_value=MAX_INVENTORY_QUANTITY,
+    )
+    reason = serializers.CharField(
+        max_length=255,
+        allow_blank=False,
+        trim_whitespace=True,
+    )
+
+    def validate_quantity_delta(self, value):
+        if value == 0:
+            raise serializers.ValidationError("Quantity delta cannot be zero.")
+        return value
+
+    def validate(self, attrs):
+        server_fields = {
+            field: "This field is calculated by the server."
+            for field in (
+                "quantity_before",
+                "quantity_after",
+                "movement_type",
+                "order",
+                "order_id",
+                "performed_by",
+            )
+            if field in self.initial_data
+        }
+        if server_fields:
+            raise serializers.ValidationError(server_fields)
+        return attrs
 
 class OrderProductSerializer(serializers.ModelSerializer):
     class Meta:

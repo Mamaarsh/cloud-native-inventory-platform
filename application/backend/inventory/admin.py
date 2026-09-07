@@ -1,6 +1,7 @@
 from django.contrib import admin
 from .models import (
     Inventory,
+    InventoryMovement,
     Notification,
     Order,
     OrderItem,
@@ -52,6 +53,61 @@ class InventoryAdmin(admin.ModelAdmin):
     list_filter = (
         "warehouse",
     )
+
+@admin.register(InventoryMovement)
+class InventoryMovementAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "inventory",
+        "movement_type",
+        "quantity_delta",
+        "quantity_before",
+        "quantity_after",
+        "order",
+        "performed_by",
+        "created_at",
+    )
+    list_filter = (
+        "movement_type",
+        "created_at",
+    )
+    search_fields = (
+        "inventory__product__name",
+        "inventory__product__sku",
+        "inventory__warehouse__name",
+        "performed_by__username",
+        "order__id",
+        "reason",
+    )
+    list_select_related = (
+        "inventory__product",
+        "inventory__warehouse",
+        "order",
+        "performed_by",
+    )
+    readonly_fields = (
+        "inventory",
+        "movement_type",
+        "quantity_delta",
+        "quantity_before",
+        "quantity_after",
+        "reason",
+        "order",
+        "performed_by",
+        "created_at",
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return request.method in {"GET", "HEAD"} and super().has_change_permission(
+            request,
+            obj,
+        )
 
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):

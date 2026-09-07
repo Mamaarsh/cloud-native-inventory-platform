@@ -1,7 +1,16 @@
 import { useState } from "react";
-import { Boxes, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import {
+  Boxes,
+  History,
+  Plus,
+  Search,
+  SlidersHorizontal,
+  Trash2,
+} from "lucide-react";
 import { RoleGuard } from "@/auth/RoleGuard";
+import { InventoryAdjustmentForm } from "@/components/inventory/InventoryAdjustmentForm";
 import { InventoryForm } from "@/components/inventory/InventoryForm";
+import { InventoryMovementHistory } from "@/components/inventory/InventoryMovementHistory";
 import { ProductImage } from "@/components/products/ProductImage";
 import { BackgroundFetchIndicator } from "@/components/ui/BackgroundFetchIndicator";
 import { Badge } from "@/components/ui/Badge";
@@ -15,10 +24,10 @@ import { Pagination } from "@/components/ui/Pagination";
 import { Select } from "@/components/ui/Select";
 import { Spinner } from "@/components/ui/Spinner";
 import {
+  useAdjustInventory,
   useCreateInventory,
   useDeleteInventory,
   useInventory,
-  useUpdateInventory,
 } from "@/hooks/useInventory";
 import { useAuth } from "@/hooks/useAuth";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
@@ -27,7 +36,11 @@ import { useAllProducts } from "@/hooks/useProducts";
 import { useAllWarehouses } from "@/hooks/useWarehouses";
 import { formatDate } from "@/lib/format";
 import { getInventoryStatus } from "@/lib/inventory-status";
-import type { Inventory, InventoryRequest } from "@/types";
+import type {
+  Inventory,
+  InventoryAdjustmentRequest,
+  InventoryRequest,
+} from "@/types";
 import { ROLES } from "@/types";
 
 const inventoryCreators = [ROLES.admin, ROLES.warehouseManager, ROLES.operator];
@@ -38,8 +51,10 @@ export function InventoryPage() {
   const [search, setSearch] = useState("");
   const [product, setProduct] = useState<number | undefined>();
   const [warehouse, setWarehouse] = useState<number | undefined>();
-  const [editing, setEditing] = useState<Inventory | null>(null);
   const [formOpen, setFormOpen] = useState(false);
+  const [adjusting, setAdjusting] = useState<Inventory | null>(null);
+  const [history, setHistory] = useState<Inventory | null>(null);
+  const [historyPage, setHistoryPage] = useState(1);
   const [deleting, setDeleting] = useState<Inventory | null>(null);
   const debouncedSearch = useDebouncedValue(search);
 
@@ -53,7 +68,7 @@ export function InventoryPage() {
   const products = useAllProducts();
   const warehouses = useAllWarehouses();
   const createMutation = useCreateInventory();
-  const updateMutation = useUpdateInventory();
+  const adjustMutation = useAdjustInventory();
   const deleteMutation = useDeleteInventory();
   const { hasRole } = useAuth();
   const { showSuccess } = useSuccessFeedback();
@@ -70,18 +85,29 @@ export function InventoryPage() {
     setPage(1);
   }
 
-  function openForm(item?: Inventory): void {
+  function openForm(): void {
     createMutation.reset();
-    updateMutation.reset();
-    setEditing(item ?? null);
     setFormOpen(true);
   }
 
   function closeForm(): void {
     setFormOpen(false);
-    setEditing(null);
     createMutation.reset();
-    updateMutation.reset();
+  }
+
+  function closeAdjustmentModal(): void {
+    setAdjusting(null);
+    adjustMutation.reset();
+  }
+
+  function openHistory(item: Inventory): void {
+    setHistoryPage(1);
+    setHistory(item);
+  }
+
+  function closeHistory(): void {
+    setHistory(null);
+    setHistoryPage(1);
   }
 
   function closeDeleteModal(): void {
@@ -90,14 +116,18 @@ export function InventoryPage() {
   }
 
   async function saveInventory(payload: InventoryRequest): Promise<void> {
-    if (editing) {
-      await updateMutation.mutateAsync({ id: editing.id, payload });
-      showSuccess("Inventory record updated successfully.");
-    } else {
-      await createMutation.mutateAsync(payload);
-      showSuccess("Inventory record created successfully.");
-    }
+    await createMutation.mutateAsync(payload);
+    showSuccess("Inventory record created successfully.");
     closeForm();
+  }
+
+  async function adjustStock(
+    payload: InventoryAdjustmentRequest,
+  ): Promise<void> {
+    if (!adjusting) return;
+    await adjustMutation.mutateAsync({ id: adjusting.id, payload });
+    showSuccess("Stock adjusted successfully.");
+    closeAdjustmentModal();
   }
 
   async function confirmDelete(): Promise<void> {
@@ -119,7 +149,7 @@ export function InventoryPage() {
         description="Inspect and manage quantity by product and warehouse. Filters are evaluated by the backend API."
         actions={
           <RoleGuard role={inventoryCreators}>
-            <Button onClick={() => openForm()}>
+            <Button onClick={openForm}>
               <Plus className="size-4" /> Add inventory
             </Button>
           </RoleGuard>
@@ -205,7 +235,7 @@ export function InventoryPage() {
                   Clear filters
                 </Button>
               ) : canCreateInventory ? (
-                <Button size="sm" onClick={() => openForm()}>
+                <Button size="sm" onClick={openForm}>
                   <Plus className="size-4" /> Add inventory
                 </Button>
               ) : undefined
@@ -272,13 +302,21 @@ export function InventoryPage() {
                             <RoleGuard role={inventoryEditors}>
                               <button
                                 type="button"
-                                onClick={() => openForm(item)}
+                                onClick={() => setAdjusting(item)}
                                 className="grid size-10 place-items-center rounded-lg text-slate-500 transition-colors hover:bg-brand-50 hover:text-brand-700 motion-reduce:transition-none"
-                                aria-label={`Edit inventory for ${productRecord?.name ?? `product ${item.product}`}`}
+                                aria-label={`Adjust stock for ${productRecord?.name ?? `product ${item.product}`}`}
                               >
-                                <Pencil className="size-4" aria-hidden="true" />
+                                <SlidersHorizontal className="size-4" aria-hidden="true" />
                               </button>
                             </RoleGuard>
+                            <button
+                              type="button"
+                              onClick={() => openHistory(item)}
+                              className="grid size-10 place-items-center rounded-lg text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 motion-reduce:transition-none"
+                              aria-label={`View stock history for ${productRecord?.name ?? `product ${item.product}`}`}
+                            >
+                              <History className="size-4" aria-hidden="true" />
+                            </button>
                             <RoleGuard role={ROLES.admin}>
                               <button
                                 type="button"
@@ -313,17 +351,52 @@ export function InventoryPage() {
       <Modal
         open={formOpen}
         onClose={closeForm}
-        title={editing ? "Edit inventory" : "Add inventory"}
+        title="Add inventory"
         description="Each product and warehouse combination can have one stock record."
       >
         <InventoryForm
-          key={editing?.id ?? "new"}
-          inventory={editing ?? undefined}
           onSubmit={saveInventory}
           onCancel={closeForm}
-          isSubmitting={createMutation.isPending || updateMutation.isPending}
-          serverError={createMutation.error ?? updateMutation.error}
+          isSubmitting={createMutation.isPending}
+          serverError={createMutation.error}
         />
+      </Modal>
+
+      <Modal
+        open={Boolean(adjusting)}
+        onClose={closeAdjustmentModal}
+        title="Adjust stock"
+        description="The adjustment and reason will be recorded in immutable history."
+        isBusy={adjustMutation.isPending}
+      >
+        {adjusting ? (
+          <InventoryAdjustmentForm
+            key={adjusting.id}
+            currentQuantity={adjusting.quantity}
+            onSubmit={adjustStock}
+            onCancel={closeAdjustmentModal}
+            isSubmitting={adjustMutation.isPending}
+            serverError={adjustMutation.error}
+          />
+        ) : null}
+      </Modal>
+
+      <Modal
+        open={Boolean(history)}
+        onClose={closeHistory}
+        title="Stock movement history"
+        description={history
+          ? `${productMap.get(history.product)?.name ?? `Product #${history.product}`} · ${warehouseMap.get(history.warehouse)?.name ?? `Warehouse #${history.warehouse}`}`
+          : undefined}
+        size="lg"
+      >
+        {history ? (
+          <InventoryMovementHistory
+            inventoryId={history.id}
+            page={historyPage}
+            onPageChange={setHistoryPage}
+          />
+        ) : null}
       </Modal>
 
       <Modal

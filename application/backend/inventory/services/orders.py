@@ -4,8 +4,8 @@ from inventory.services.stock import deduct_stock
 
 @transaction.atomic
 def create_order(*, user, items):
-    deduct_stock(items)
     order = Order.objects.create(user=user)
+    deduct_stock(items, order=order, performed_by=user)
     OrderItem.objects.bulk_create(
         [
             OrderItem(

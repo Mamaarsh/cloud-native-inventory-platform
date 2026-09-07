@@ -1,5 +1,6 @@
 from django.db import models
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from .validators import validate_product_image
 
 class Product(models.Model):
@@ -51,6 +52,73 @@ class Inventory(models.Model):
 
     def __str__(self):
         return f"{self.product} - {self.warehouse}: {self.quantity}"
+
+class InventoryMovement(models.Model):
+    class Type(models.TextChoices):
+        INITIAL_STOCK = "initial_stock", "Initial stock"
+        MANUAL_ADJUSTMENT = "manual_adjustment", "Manual adjustment"
+        ORDER_DEDUCTION = "order_deduction", "Order deduction"
+
+    inventory = models.ForeignKey(
+        Inventory,
+        on_delete=models.PROTECT,
+        related_name="movements",
+    )
+    movement_type = models.CharField(max_length=30, choices=Type.choices)
+    quantity_delta = models.IntegerField()
+    quantity_before = models.PositiveIntegerField()
+    quantity_after = models.PositiveIntegerField()
+    reason = models.CharField(max_length=255, blank=True, default="")
+    order = models.ForeignKey(
+        "Order",
+        on_delete=models.PROTECT,
+        related_name="inventory_movements",
+        null=True,
+        blank=True,
+    )
+    performed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="inventory_movements",
+        null=True,
+        blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-created_at", "-id")
+        indexes = (
+            models.Index(fields=("inventory", "-created_at")),
+        )
+        constraints = (
+            models.CheckConstraint(
+                condition=~models.Q(quantity_delta=0),
+                name="inventory_movement_delta_nonzero",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(
+                    quantity_after=(
+                        models.F("quantity_before")
+                        + models.F("quantity_delta")
+                    )
+                ),
+                name="inventory_movement_balances",
+            ),
+        )
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ValidationError("Inventory movements are immutable.")
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError("Inventory movements are immutable.")
+
+    def __str__(self):
+        return (
+            f"Inventory #{self.inventory_id}: "
+            f"{self.quantity_before} -> {self.quantity_after}"
+        )
 
 class Order(models.Model):
     class Status(models.TextChoices):
