@@ -1,6 +1,7 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 from inventory.views import (
+    AuditLogViewSet,
     InventoryViewSet,
     OrderViewSet,
     ProductViewSet,
@@ -8,6 +9,12 @@ from inventory.views import (
 )
 
 router = DefaultRouter()
+
+router.register(
+    "audit-logs",
+    AuditLogViewSet,
+    basename="audit-log",
+)
 
 router.register(
     "products",

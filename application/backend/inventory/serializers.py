@@ -2,6 +2,7 @@ from functools import partial
 from django.db import transaction
 from rest_framework import serializers
 from .models import (
+    AuditLog,
     Inventory,
     InventoryMovement,
     Order,
@@ -146,6 +147,23 @@ class InventorySerializer(serializers.ModelSerializer):
 class AuditActorSerializer(serializers.Serializer):
     id = serializers.IntegerField(read_only=True)
     username = serializers.CharField(read_only=True)
+
+class AuditLogSerializer(serializers.ModelSerializer):
+    actor = AuditActorSerializer(read_only=True)
+
+    class Meta:
+        model = AuditLog
+        fields = (
+            "id",
+            "actor",
+            "action",
+            "target_type",
+            "target_id",
+            "target_label",
+            "metadata",
+            "created_at",
+        )
+        read_only_fields = fields
 
 class InventoryMovementSerializer(serializers.ModelSerializer):
     performed_by = AuditActorSerializer(read_only=True)

@@ -69,6 +69,36 @@ export interface AdminUserUpdateRequest {
   role?: Role;
 }
 
+export interface AuditActor {
+  id: number;
+  username: string;
+}
+
+export type AuditTargetType =
+  | "user"
+  | "product"
+  | "warehouse"
+  | "inventory"
+  | "order"
+  | "payment";
+
+export interface AuditLogEntry {
+  id: number;
+  actor: AuditActor | null;
+  action: string;
+  target_type: AuditTargetType;
+  target_id: string;
+  target_label: string;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AuditLogQueryParams extends PageParams {
+  action?: string;
+  target_type?: AuditTargetType;
+  actor?: number;
+}
+
 export interface OrderUser {
   id: number;
   username: string;

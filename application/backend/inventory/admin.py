@@ -1,6 +1,7 @@
 from django.contrib import admin
 from django.db import transaction
 from .models import (
+    AuditLog,
     Inventory,
     InventoryMovement,
     Notification,
@@ -11,6 +12,20 @@ from .models import (
     Product,
     Warehouse,
 )
+from .services.audit import record_audit_event
+
+def _admin_changes(previous, current, fields):
+    changes = {}
+    for field in fields:
+        before = getattr(previous, field)
+        after = getattr(current, field)
+        if before == after:
+            continue
+        if field == "price":
+            before = str(before)
+            after = str(after)
+        changes[field] = {"before": before, "after": after}
+    return changes
 
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
@@ -30,6 +45,69 @@ class ProductAdmin(admin.ModelAdmin):
         "is_active",
     )
 
+    def save_model(self, request, obj, form, change):
+        previous = Product.objects.get(pk=obj.pk) if change else None
+        old_image_name = previous.image.name if previous and previous.image else None
+        super().save_model(request, obj, form, change)
+        if not change:
+            action = AuditLog.Action.PRODUCT_CREATED
+            metadata = {}
+        else:
+            changes = _admin_changes(
+                previous,
+                obj,
+                ("name", "sku", "price", "is_active"),
+            )
+            metadata = {"changes": changes}
+            new_image_name = obj.image.name if obj.image else None
+            if old_image_name != new_image_name:
+                metadata["image_changed"] = True
+            if not changes and "image_changed" not in metadata:
+                return
+            if "is_active" in changes:
+                action = (
+                    AuditLog.Action.PRODUCT_ACTIVATED
+                    if obj.is_active
+                    else AuditLog.Action.PRODUCT_DEACTIVATED
+                )
+            else:
+                action = AuditLog.Action.PRODUCT_UPDATED
+        record_audit_event(
+            actor=request.user,
+            action=action,
+            target_type=AuditLog.TargetType.PRODUCT,
+            target_id=obj.pk,
+            target_label=f"{obj.name} · {obj.sku}",
+            metadata=metadata,
+        )
+
+    def delete_model(self, request, obj):
+        target_id = obj.pk
+        target_label = f"{obj.name} · {obj.sku}"
+        super().delete_model(request, obj)
+        record_audit_event(
+            actor=request.user,
+            action=AuditLog.Action.PRODUCT_DELETED,
+            target_type=AuditLog.TargetType.PRODUCT,
+            target_id=target_id,
+            target_label=target_label,
+        )
+
+    def delete_queryset(self, request, queryset):
+        targets = [
+            (product.pk, f"{product.name} · {product.sku}")
+            for product in queryset
+        ]
+        super().delete_queryset(request, queryset)
+        for target_id, target_label in targets:
+            record_audit_event(
+                actor=request.user,
+                action=AuditLog.Action.PRODUCT_DELETED,
+                target_type=AuditLog.TargetType.PRODUCT,
+                target_id=target_id,
+                target_label=target_label,
+            )
+
 @admin.register(Warehouse)
 class WarehouseAdmin(admin.ModelAdmin):
     list_display = (
@@ -43,6 +121,63 @@ class WarehouseAdmin(admin.ModelAdmin):
         "location",
     )
 
+    def save_model(self, request, obj, form, change):
+        previous = Warehouse.objects.get(pk=obj.pk) if change else None
+        super().save_model(request, obj, form, change)
+        action = (
+            AuditLog.Action.WAREHOUSE_UPDATED
+            if change
+            else AuditLog.Action.WAREHOUSE_CREATED
+        )
+        metadata = (
+            {
+                "changes": _admin_changes(
+                    previous,
+                    obj,
+                    ("name", "location"),
+                )
+            }
+            if change
+            else {}
+        )
+        if change and not metadata["changes"]:
+            return
+        record_audit_event(
+            actor=request.user,
+            action=action,
+            target_type=AuditLog.TargetType.WAREHOUSE,
+            target_id=obj.pk,
+            target_label=obj.name,
+            metadata=metadata,
+        )
+
+    def delete_model(self, request, obj):
+        target_id = obj.pk
+        target_label = obj.name
+        super().delete_model(request, obj)
+        record_audit_event(
+            actor=request.user,
+            action=AuditLog.Action.WAREHOUSE_DELETED,
+            target_type=AuditLog.TargetType.WAREHOUSE,
+            target_id=target_id,
+            target_label=target_label,
+        )
+
+    def delete_queryset(self, request, queryset):
+        targets = [
+            (warehouse.pk, warehouse.name)
+            for warehouse in queryset
+        ]
+        super().delete_queryset(request, queryset)
+        for target_id, target_label in targets:
+            record_audit_event(
+                actor=request.user,
+                action=AuditLog.Action.WAREHOUSE_DELETED,
+                target_type=AuditLog.TargetType.WAREHOUSE,
+                target_id=target_id,
+                target_label=target_label,
+            )
+
 @admin.register(Inventory)
 class InventoryAdmin(admin.ModelAdmin):
     list_display = (
@@ -55,6 +190,17 @@ class InventoryAdmin(admin.ModelAdmin):
     list_filter = (
         "warehouse",
     )
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        if not change:
+            record_audit_event(
+                actor=request.user,
+                action=AuditLog.Action.INVENTORY_CREATED,
+                target_type=AuditLog.TargetType.INVENTORY,
+                target_id=obj.pk,
+                target_label=f"{obj.product.name} · {obj.warehouse.name}",
+            )
 
 @admin.register(InventoryMovement)
 class InventoryMovementAdmin(admin.ModelAdmin):
@@ -136,6 +282,14 @@ class OrderAdmin(admin.ModelAdmin):
                 to_status=obj.status,
                 performed_by=request.user,
             )
+            record_audit_event(
+                actor=request.user,
+                action=AuditLog.Action.ORDER_CREATED,
+                target_type=AuditLog.TargetType.ORDER,
+                target_id=obj.pk,
+                target_label=f"Order #{obj.pk}",
+                metadata={"item_count": 0},
+            )
 
 @admin.register(OrderStatusHistory)
 class OrderStatusHistoryAdmin(admin.ModelAdmin):
@@ -167,6 +321,50 @@ class OrderStatusHistoryAdmin(admin.ModelAdmin):
         "from_status",
         "to_status",
         "performed_by",
+        "created_at",
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return request.method in {"GET", "HEAD"} and super().has_change_permission(
+            request,
+            obj,
+        )
+
+@admin.register(AuditLog)
+class AuditLogAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "actor",
+        "action",
+        "target_type",
+        "target_id",
+        "target_label",
+        "created_at",
+    )
+    list_filter = (
+        "action",
+        "target_type",
+        "created_at",
+    )
+    search_fields = (
+        "actor__username",
+        "target_label",
+        "target_id",
+    )
+    list_select_related = ("actor",)
+    readonly_fields = (
+        "actor",
+        "action",
+        "target_type",
+        "target_id",
+        "target_label",
+        "metadata",
         "created_at",
     )
 

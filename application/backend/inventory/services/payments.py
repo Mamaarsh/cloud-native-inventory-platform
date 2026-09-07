@@ -1,7 +1,8 @@
 import logging
 from django.db import models, transaction
 from rest_framework.exceptions import ValidationError
-from inventory.models import Notification, Order, Payment
+from inventory.models import AuditLog, Notification, Order, Payment
+from inventory.services.audit import record_audit_event
 from inventory.services.notifications import create_notification
 from inventory.services.order_status import transition_order_status
 from inventory.services.payment_providers import mock_payment_provider
@@ -82,6 +83,18 @@ def process_payment(order, *, performed_by=None):
             locked_order.pk,
             payment.pk,
             payment.provider_reference,
+        )
+        record_audit_event(
+            actor=performed_by,
+            action=AuditLog.Action.PAYMENT_SUCCEEDED,
+            target_type=AuditLog.TargetType.ORDER,
+            target_id=locked_order.pk,
+            target_label=f"Order #{locked_order.pk}",
+            metadata={
+                "payment_id": payment.pk,
+                "provider": payment.provider,
+                "amount": f"{payment.amount:.2f}",
+            },
         )
     else:
         logger.warning(

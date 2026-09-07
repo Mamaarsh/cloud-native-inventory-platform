@@ -1,5 +1,6 @@
 from django.db import transaction
-from inventory.models import Order, OrderItem, OrderStatusHistory
+from inventory.models import AuditLog, Order, OrderItem, OrderStatusHistory
+from inventory.services.audit import record_audit_event
 from inventory.services.stock import deduct_stock
 
 @transaction.atomic
@@ -23,5 +24,13 @@ def create_order(*, user, items):
             )
             for item in items
         ]
+    )
+    record_audit_event(
+        actor=user,
+        action=AuditLog.Action.ORDER_CREATED,
+        target_type=AuditLog.TargetType.ORDER,
+        target_id=order.pk,
+        target_label=f"Order #{order.pk}",
+        metadata={"item_count": len(items)},
     )
     return order

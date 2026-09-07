@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Boxes,
+  ClipboardClock,
   ClipboardList,
   LayoutDashboard,
   PackageSearch,
@@ -36,7 +37,7 @@ interface NavigationLink {
   label: string;
   icon: typeof Boxes;
   end: boolean;
-  role?: Role;
+  role?: Role | Role[];
 }
 
 const links: NavigationLink[] = [
@@ -46,6 +47,13 @@ const links: NavigationLink[] = [
   { to: "/inventory", label: "Inventory", icon: Boxes, end: false },
   { to: "/orders", label: "Orders", icon: ClipboardList, end: false },
   { to: "/users", label: "Users", icon: UsersRound, end: false, role: ROLES.admin },
+  {
+    to: "/audit-log",
+    label: "Audit log",
+    icon: ClipboardClock,
+    end: false,
+    role: [ROLES.admin, ROLES.auditor],
+  },
 ];
 
 function getFocusableElements(container: HTMLElement): HTMLElement[] {

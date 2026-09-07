@@ -3,7 +3,8 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
-from inventory.models import Inventory, InventoryMovement
+from inventory.models import AuditLog, Inventory, InventoryMovement
+from inventory.services.audit import record_audit_event
 
 MAX_INVENTORY_QUANTITY = 2_147_483_647
 
@@ -95,7 +96,7 @@ def adjust_inventory(
     locked_inventory = Inventory.objects.select_for_update().get(
         pk=inventory.pk
     )
-    return _apply_locked_stock_change(
+    updated_inventory, movement = _apply_locked_stock_change(
         inventory=locked_inventory,
         quantity_delta=quantity_delta,
         movement_type=movement_type,
@@ -103,6 +104,19 @@ def adjust_inventory(
         reason=reason,
         order=order,
     )
+    if movement_type == InventoryMovement.Type.MANUAL_ADJUSTMENT:
+        record_audit_event(
+            actor=performed_by,
+            action=AuditLog.Action.INVENTORY_ADJUSTED,
+            target_type=AuditLog.TargetType.INVENTORY,
+            target_id=updated_inventory.pk,
+            target_label=(
+                f"{updated_inventory.product.name} · "
+                f"{updated_inventory.warehouse.name}"
+            ),
+            metadata={"movement_id": movement.pk},
+        )
+    return updated_inventory, movement
 
 @transaction.atomic
 def deduct_stock(order_items, *, order, performed_by):

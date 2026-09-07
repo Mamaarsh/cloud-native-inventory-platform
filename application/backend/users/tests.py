@@ -65,6 +65,7 @@ class CreateRolesCommandTests(TestCase):
                 "view_order",
             },
             "Auditor": {
+                "view_auditlog",
                 "view_product",
                 "view_inventory",
                 "view_order",

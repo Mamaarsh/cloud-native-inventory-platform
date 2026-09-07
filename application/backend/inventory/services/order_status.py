@@ -1,6 +1,7 @@
 from django.db import transaction
 from rest_framework.exceptions import ValidationError
-from inventory.models import Notification, Order, OrderStatusHistory
+from inventory.models import AuditLog, Notification, Order, OrderStatusHistory
+from inventory.services.audit import record_audit_event
 from inventory.services.notifications import create_notification
 
 ALLOWED_STATUS_TRANSITIONS = {
@@ -33,11 +34,19 @@ def transition_order_status(order, new_status, *, performed_by=None):
     previous_status = locked_order.status
     locked_order.status = new_status
     locked_order.save(update_fields=("status", "updated_at"))
-    OrderStatusHistory.objects.create(
+    history = OrderStatusHistory.objects.create(
         order=locked_order,
         from_status=previous_status,
         to_status=new_status,
         performed_by=performed_by,
+    )
+    record_audit_event(
+        actor=performed_by,
+        action=AuditLog.Action.ORDER_STATUS_CHANGED,
+        target_type=AuditLog.TargetType.ORDER,
+        target_id=locked_order.pk,
+        target_label=f"Order #{locked_order.pk}",
+        metadata={"status_history_id": history.pk},
     )
     notification_event = {
         Order.Status.SHIPPED: Notification.EventType.ORDER_SHIPPED,

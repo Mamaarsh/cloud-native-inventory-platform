@@ -1,6 +1,6 @@
 import logging
 from django.conf import settings
-from django.db import DatabaseError, connection
+from django.db import DatabaseError, connection, transaction
 from django.db.models import Prefetch
 from django.db.models.deletion import ProtectedError
 from drf_spectacular.utils import extend_schema
@@ -13,13 +13,15 @@ from redis.exceptions import RedisError
 from users.permissions import (
     InventoryAdjustmentPermission,
     InventoryPermission,
+    IsAuditViewer,
     OrderPermission,
     OrderStatusPermission,
     ProductPermission,
     WarehousePermission,
 )
-from .models import Inventory, Order, OrderItem, Product, Warehouse
+from .models import AuditLog, Inventory, Order, OrderItem, Product, Warehouse
 from .serializers import (
+    AuditLogSerializer,
     InventoryAdjustmentSerializer,
     InventoryMovementSerializer,
     InventorySerializer,
@@ -33,7 +35,12 @@ from .serializers import (
     ProductSerializer,
     WarehouseSerializer,
 )
-from .services import adjust_inventory, process_payment, transition_order_status
+from .services import (
+    adjust_inventory,
+    process_payment,
+    record_audit_event,
+    transition_order_status,
+)
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import OrderingFilter, SearchFilter
 
@@ -55,6 +62,27 @@ class WarehouseDeletionConflict(APIException):
         "inventory or order history."
     )
     default_code = "warehouse_in_use"
+
+def _product_label(product):
+    return f"{product.name} · {product.sku}"
+
+def _warehouse_label(warehouse):
+    return warehouse.name
+
+def _inventory_label(inventory):
+    return f"{inventory.product.name} · {inventory.warehouse.name}"
+
+def _changed_values(before, instance, fields):
+    changes = {}
+    for field in fields:
+        old_value = before[field]
+        new_value = getattr(instance, field)
+        if old_value != new_value:
+            changes[field] = {
+                "before": str(old_value) if field == "price" else old_value,
+                "after": str(new_value) if field == "price" else new_value,
+            }
+    return changes
 
 @api_view(["GET"])
 def health_live(request):
@@ -171,13 +199,73 @@ class ProductViewSet(viewsets.ModelViewSet):
         'created_at',
     )
 
+    @transaction.atomic
+    def perform_create(self, serializer):
+        product = serializer.save()
+        record_audit_event(
+            actor=self.request.user,
+            action=AuditLog.Action.PRODUCT_CREATED,
+            target_type=AuditLog.TargetType.PRODUCT,
+            target_id=product.pk,
+            target_label=_product_label(product),
+        )
+
+    @transaction.atomic
+    def perform_update(self, serializer):
+        product = serializer.instance
+        before = {
+            field: getattr(product, field)
+            for field in ("name", "sku", "price", "is_active")
+        }
+        old_image_name = product.image.name if product.image else None
+        updated_product = serializer.save()
+        changes = _changed_values(
+            before,
+            updated_product,
+            ("name", "sku", "price", "is_active"),
+        )
+        new_image_name = (
+            updated_product.image.name if updated_product.image else None
+        )
+        metadata = {"changes": changes}
+        if old_image_name != new_image_name:
+            metadata["image_changed"] = True
+        if not changes and "image_changed" not in metadata:
+            return
+        if "is_active" in changes:
+            action = (
+                AuditLog.Action.PRODUCT_ACTIVATED
+                if updated_product.is_active
+                else AuditLog.Action.PRODUCT_DEACTIVATED
+            )
+        else:
+            action = AuditLog.Action.PRODUCT_UPDATED
+        record_audit_event(
+            actor=self.request.user,
+            action=action,
+            target_type=AuditLog.TargetType.PRODUCT,
+            target_id=updated_product.pk,
+            target_label=_product_label(updated_product),
+            metadata=metadata,
+        )
+
+    @transaction.atomic
     def perform_destroy(self, instance):
         if instance.inventories.exists() or instance.order_items.exists():
             raise ProductDeletionConflict()
+        target_id = instance.pk
+        target_label = _product_label(instance)
         try:
             instance.delete()
         except ProtectedError as exc:
             raise ProductDeletionConflict() from exc
+        record_audit_event(
+            actor=self.request.user,
+            action=AuditLog.Action.PRODUCT_DELETED,
+            target_type=AuditLog.TargetType.PRODUCT,
+            target_id=target_id,
+            target_label=target_label,
+        )
 
 class WarehouseViewSet(viewsets.ModelViewSet):
     queryset = Warehouse.objects.all().order_by("-created_at")
@@ -200,13 +288,58 @@ class WarehouseViewSet(viewsets.ModelViewSet):
         "created_at",
     )
 
+    @transaction.atomic
+    def perform_create(self, serializer):
+        warehouse = serializer.save()
+        record_audit_event(
+            actor=self.request.user,
+            action=AuditLog.Action.WAREHOUSE_CREATED,
+            target_type=AuditLog.TargetType.WAREHOUSE,
+            target_id=warehouse.pk,
+            target_label=_warehouse_label(warehouse),
+        )
+
+    @transaction.atomic
+    def perform_update(self, serializer):
+        warehouse = serializer.instance
+        before = {
+            field: getattr(warehouse, field)
+            for field in ("name", "location")
+        }
+        updated_warehouse = serializer.save()
+        changes = _changed_values(
+            before,
+            updated_warehouse,
+            ("name", "location"),
+        )
+        if not changes:
+            return
+        record_audit_event(
+            actor=self.request.user,
+            action=AuditLog.Action.WAREHOUSE_UPDATED,
+            target_type=AuditLog.TargetType.WAREHOUSE,
+            target_id=updated_warehouse.pk,
+            target_label=_warehouse_label(updated_warehouse),
+            metadata={"changes": changes},
+        )
+
+    @transaction.atomic
     def perform_destroy(self, instance):
         if instance.inventories.exists() or instance.order_items.exists():
             raise WarehouseDeletionConflict()
+        target_id = instance.pk
+        target_label = _warehouse_label(instance)
         try:
             instance.delete()
         except ProtectedError as exc:
             raise WarehouseDeletionConflict() from exc
+        record_audit_event(
+            actor=self.request.user,
+            action=AuditLog.Action.WAREHOUSE_DELETED,
+            target_type=AuditLog.TargetType.WAREHOUSE,
+            target_id=target_id,
+            target_label=target_label,
+        )
 
 class InventoryViewSet(viewsets.ModelViewSet):
     queryset = Inventory.objects.all().select_related(
@@ -234,6 +367,18 @@ class InventoryViewSet(viewsets.ModelViewSet):
         "updated_at",
     )
 
+    @transaction.atomic
+    def perform_create(self, serializer):
+        inventory = serializer.save()
+        record_audit_event(
+            actor=self.request.user,
+            action=AuditLog.Action.INVENTORY_CREATED,
+            target_type=AuditLog.TargetType.INVENTORY,
+            target_id=inventory.pk,
+            target_label=_inventory_label(inventory),
+        )
+
+    @transaction.atomic
     def perform_destroy(self, instance):
         if instance.movements.exists():
             raise ValidationError(
@@ -243,7 +388,16 @@ class InventoryViewSet(viewsets.ModelViewSet):
                     )
                 }
             )
+        target_id = instance.pk
+        target_label = _inventory_label(instance)
         super().perform_destroy(instance)
+        record_audit_event(
+            actor=self.request.user,
+            action=AuditLog.Action.INVENTORY_DELETED,
+            target_type=AuditLog.TargetType.INVENTORY,
+            target_id=target_id,
+            target_label=target_label,
+        )
 
     @extend_schema(
         request=InventoryAdjustmentSerializer,
@@ -285,6 +439,29 @@ class InventoryViewSet(viewsets.ModelViewSet):
             serializer = InventoryMovementSerializer(page, many=True)
             return self.get_paginated_response(serializer.data)
         return Response(InventoryMovementSerializer(queryset, many=True).data)
+
+
+class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = AuditLog.objects.select_related("actor").all()
+    serializer_class = AuditLogSerializer
+    permission_classes = (IsAuditViewer,)
+    filter_backends = (
+        DjangoFilterBackend,
+        SearchFilter,
+        OrderingFilter,
+    )
+    filterset_fields = (
+        "action",
+        "target_type",
+        "actor",
+    )
+    search_fields = (
+        "target_label",
+        "target_id",
+        "actor__username",
+    )
+    ordering_fields = ("created_at",)
+    ordering = ("-created_at", "-id")
 
 class OrderViewSet(viewsets.ModelViewSet):
     queryset = Order.objects.all().select_related(

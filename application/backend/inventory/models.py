@@ -120,6 +120,81 @@ class InventoryMovement(models.Model):
             f"{self.quantity_before} -> {self.quantity_after}"
         )
 
+class AuditLog(models.Model):
+    class Action(models.TextChoices):
+        USER_CREATED = "user.created", "User created"
+        USER_REGISTERED = "user.registered", "User registered"
+        USER_ACTIVATED = "user.activated", "User activated"
+        USER_DEACTIVATED = "user.deactivated", "User deactivated"
+        USER_ROLE_CHANGED = "user.role_changed", "User role changed"
+        USER_PASSWORD_CHANGED = (
+            "user.password_changed",
+            "User password changed",
+        )
+        PRODUCT_CREATED = "product.created", "Product created"
+        PRODUCT_UPDATED = "product.updated", "Product updated"
+        PRODUCT_ACTIVATED = "product.activated", "Product activated"
+        PRODUCT_DEACTIVATED = "product.deactivated", "Product deactivated"
+        PRODUCT_DELETED = "product.deleted", "Product deleted"
+        WAREHOUSE_CREATED = "warehouse.created", "Warehouse created"
+        WAREHOUSE_UPDATED = "warehouse.updated", "Warehouse updated"
+        WAREHOUSE_DELETED = "warehouse.deleted", "Warehouse deleted"
+        INVENTORY_CREATED = "inventory.created", "Inventory created"
+        INVENTORY_ADJUSTED = "inventory.adjusted", "Inventory adjusted"
+        INVENTORY_DELETED = "inventory.deleted", "Inventory deleted"
+        ORDER_CREATED = "order.created", "Order created"
+        ORDER_STATUS_CHANGED = (
+            "order.status_changed",
+            "Order status changed",
+        )
+        PAYMENT_SUCCEEDED = "payment.succeeded", "Payment succeeded"
+
+    class TargetType(models.TextChoices):
+        USER = "user", "User"
+        PRODUCT = "product", "Product"
+        WAREHOUSE = "warehouse", "Warehouse"
+        INVENTORY = "inventory", "Inventory"
+        ORDER = "order", "Order"
+        PAYMENT = "payment", "Payment"
+
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="audit_events",
+        null=True,
+        blank=True,
+    )
+    action = models.CharField(max_length=40, choices=Action.choices)
+    target_type = models.CharField(
+        max_length=20,
+        choices=TargetType.choices,
+    )
+    target_id = models.CharField(max_length=100)
+    target_label = models.CharField(max_length=255)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-created_at", "-id")
+        indexes = (
+            models.Index(fields=("created_at",)),
+            models.Index(fields=("action", "created_at")),
+            models.Index(
+                fields=("target_type", "target_id", "created_at"),
+            ),
+        )
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ValidationError("Audit log entries are immutable.")
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError("Audit log entries are immutable.")
+
+    def __str__(self):
+        return f"{self.action}: {self.target_label}"
+
 class Order(models.Model):
     class Status(models.TextChoices):
         PENDING = "pending", "Pending"

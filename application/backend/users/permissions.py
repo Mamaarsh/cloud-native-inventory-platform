@@ -46,6 +46,15 @@ class IsOperator(_IsRole):
 class IsAuditor(_IsRole):
     role_name = AUDITOR
 
+class IsAuditViewer(BasePermission):
+    def has_permission(self, request, view):
+        return _has_any_role(
+            request.user,
+            ADMIN,
+            AUDITOR,
+            allow_superuser=False,
+        )
+
 class ProductPermission(BasePermission):
     def has_permission(self, request, view):
         if not request.user or not request.user.is_authenticated:

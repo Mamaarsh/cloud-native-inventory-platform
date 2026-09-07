@@ -3,6 +3,7 @@ import { ProtectedRoute } from "@/auth/ProtectedRoute";
 import { RoleProtectedRoute } from "@/auth/RoleProtectedRoute";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { AccountPage } from "@/pages/AccountPage";
+import { AuditLogPage } from "@/pages/AuditLogPage";
 import { DashboardPage } from "@/pages/DashboardPage";
 import { InventoryPage } from "@/pages/InventoryPage";
 import { LoginPage } from "@/pages/LoginPage";
@@ -33,6 +34,13 @@ export function AppRoutes() {
           <Route path="orders/:id" element={<OrderDetailPage />} />
           <Route element={<RoleProtectedRoute role={ROLES.admin} />}>
             <Route path="users" element={<UsersPage />} />
+          </Route>
+          <Route
+            element={
+              <RoleProtectedRoute role={[ROLES.admin, ROLES.auditor]} />
+            }
+          >
+            <Route path="audit-log" element={<AuditLogPage />} />
           </Route>
           <Route path="*" element={<NotFoundPage />} />
         </Route>

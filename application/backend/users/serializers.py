@@ -3,9 +3,10 @@ from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from rest_framework import serializers
+from inventory.models import AuditLog
+from inventory.services.audit import record_audit_event
 from .models import User
 from .permissions import ADMIN, APPLICATION_ROLES
-
 
 class UserSerializer(serializers.ModelSerializer):
     groups = serializers.SlugRelatedField(
@@ -29,7 +30,6 @@ class UserSerializer(serializers.ModelSerializer):
             "groups",
             "is_staff",
         )
-
 
 class UserRegistrationSerializer(serializers.ModelSerializer):
     email = serializers.EmailField(required=True, allow_blank=False)
@@ -101,17 +101,25 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
 
         return attrs
 
+    @transaction.atomic
     def create(self, validated_data):
         validated_data.pop("password_confirm")
         password = validated_data.pop("password")
-        return User.objects.create_user(
+        user = User.objects.create_user(
             **validated_data,
             password=password,
             is_active=False,
             is_staff=False,
             is_superuser=False,
         )
-
+        record_audit_event(
+            actor=None,
+            action=AuditLog.Action.USER_REGISTERED,
+            target_type=AuditLog.TargetType.USER,
+            target_id=user.pk,
+            target_label=user.username,
+        )
+        return user
 
 class AdminUserSerializer(serializers.ModelSerializer):
     groups = serializers.SlugRelatedField(
@@ -162,6 +170,12 @@ class AdminUserUpdateSerializer(serializers.Serializer):
     def update(self, instance, validated_data):
         user = User.objects.select_for_update().get(pk=instance.pk)
         requesting_user = self.context["request"].user
+        old_is_active = user.is_active
+        old_roles = list(
+            user.groups.filter(name__in=APPLICATION_ROLES)
+            .order_by("name")
+            .values_list("name", flat=True)
+        )
 
         if user.is_superuser:
             raise serializers.ValidationError(
@@ -210,6 +224,34 @@ class AdminUserUpdateSerializer(serializers.Serializer):
             user.groups.remove(*current_role_groups)
             user.groups.add(role_group)
 
+        if old_is_active != user.is_active:
+            record_audit_event(
+                actor=requesting_user,
+                action=(
+                    AuditLog.Action.USER_ACTIVATED
+                    if user.is_active
+                    else AuditLog.Action.USER_DEACTIVATED
+                ),
+                target_type=AuditLog.TargetType.USER,
+                target_id=user.pk,
+                target_label=user.username,
+            )
+
+        if role_name is not None:
+            new_roles = [role_name]
+            if old_roles != new_roles:
+                record_audit_event(
+                    actor=requesting_user,
+                    action=AuditLog.Action.USER_ROLE_CHANGED,
+                    target_type=AuditLog.TargetType.USER,
+                    target_id=user.pk,
+                    target_label=user.username,
+                    metadata={
+                        "old_role": ", ".join(old_roles) or None,
+                        "new_role": role_name,
+                    },
+                )
+
         return user
 
     def create(self, validated_data):
@@ -253,8 +295,16 @@ class PasswordChangeSerializer(serializers.Serializer):
 
         return attrs
 
+    @transaction.atomic
     def save(self, **kwargs):
         user = self.context["request"].user
         user.set_password(self.validated_data["new_password"])
         user.save(update_fields=("password",))
+        record_audit_event(
+            actor=user,
+            action=AuditLog.Action.USER_PASSWORD_CHANGED,
+            target_type=AuditLog.TargetType.USER,
+            target_id=user.pk,
+            target_label=user.username,
+        )
         return user
