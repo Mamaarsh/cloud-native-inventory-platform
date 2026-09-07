@@ -3,13 +3,25 @@ from django.conf import settings
 from django.db import DatabaseError, connection, transaction
 from django.db.models import Prefetch
 from django.db.models.deletion import ProtectedError
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import (
+    OpenApiResponse,
+    extend_schema,
+    extend_schema_view,
+)
 from rest_framework import status, viewsets
 from rest_framework.decorators import action, api_view
 from rest_framework.exceptions import APIException, ValidationError
 from rest_framework.response import Response
 from redis import Redis
 from redis.exceptions import RedisError
+from config.api_schema import (
+    DependencyHealthResponseSerializer,
+    DetailResponseSerializer,
+    EMPTY_OBJECT_SCHEMA,
+    LivenessResponseSerializer,
+    ReadinessResponseSerializer,
+    VALIDATION_ERROR_SCHEMA,
+)
 from users.permissions import (
     InventoryAdjustmentPermission,
     InventoryPermission,
@@ -84,9 +96,20 @@ def _changed_values(before, instance, fields):
             }
     return changes
 
+
+@extend_schema(
+    operation_id="health_liveness",
+    tags=("Health",),
+    description=(
+        "Confirms that the Django application process can respond. "
+        "No dependency is checked."
+    ),
+    responses={status.HTTP_200_OK: LivenessResponseSerializer},
+)
 @api_view(["GET"])
 def health_live(request):
     return Response({"status": "ok"})
+
 
 def _check_database():
     try:
@@ -99,6 +122,7 @@ def _check_database():
             exc.__class__.__name__,
         )
     return "unavailable"
+
 
 def _check_redis():
     redis_client = None
@@ -127,6 +151,22 @@ def _check_redis():
                 )
     return "unavailable"
 
+
+@extend_schema(
+    operation_id="health_readiness",
+    tags=("Health",),
+    description=(
+        "Checks the critical PostgreSQL dependency. Redis does not affect "
+        "application readiness."
+    ),
+    responses={
+        status.HTTP_200_OK: ReadinessResponseSerializer,
+        status.HTTP_503_SERVICE_UNAVAILABLE: OpenApiResponse(
+            response=ReadinessResponseSerializer,
+            description="PostgreSQL is unavailable.",
+        ),
+    },
+)
 @api_view(["GET"])
 def health_ready(request):
     database_status = _check_database()
@@ -148,6 +188,21 @@ def health_ready(request):
         }
     )
 
+@extend_schema(
+    operation_id="health_dependencies",
+    tags=("Health",),
+    description=(
+        "Reports PostgreSQL and Redis health for monitoring. Redis failure "
+        "is degraded; PostgreSQL failure is unhealthy."
+    ),
+    responses={
+        status.HTTP_200_OK: DependencyHealthResponseSerializer,
+        status.HTTP_503_SERVICE_UNAVAILABLE: OpenApiResponse(
+            response=DependencyHealthResponseSerializer,
+            description="PostgreSQL is unavailable.",
+        ),
+    },
+)
 @api_view(["GET"])
 def health_dependencies(request):
     checks = {
@@ -177,6 +232,23 @@ def health_dependencies(request):
         status=response_status,
     )
 
+@extend_schema_view(
+    destroy=extend_schema(
+        responses={
+            status.HTTP_204_NO_CONTENT: None,
+            status.HTTP_401_UNAUTHORIZED: DetailResponseSerializer,
+            status.HTTP_403_FORBIDDEN: DetailResponseSerializer,
+            status.HTTP_404_NOT_FOUND: DetailResponseSerializer,
+            status.HTTP_409_CONFLICT: OpenApiResponse(
+                response=DetailResponseSerializer,
+                description=(
+                    "The product is referenced by inventory or order history."
+                ),
+            ),
+        }
+    )
+)
+@extend_schema(tags=("Products",))
 class ProductViewSet(viewsets.ModelViewSet):
     queryset = Product.objects.all().order_by("-created_at")
     serializer_class = ProductSerializer
@@ -267,6 +339,23 @@ class ProductViewSet(viewsets.ModelViewSet):
             target_label=target_label,
         )
 
+@extend_schema_view(
+    destroy=extend_schema(
+        responses={
+            status.HTTP_204_NO_CONTENT: None,
+            status.HTTP_401_UNAUTHORIZED: DetailResponseSerializer,
+            status.HTTP_403_FORBIDDEN: DetailResponseSerializer,
+            status.HTTP_404_NOT_FOUND: DetailResponseSerializer,
+            status.HTTP_409_CONFLICT: OpenApiResponse(
+                response=DetailResponseSerializer,
+                description=(
+                    "The warehouse is referenced by inventory or order history."
+                ),
+            ),
+        }
+    )
+)
+@extend_schema(tags=("Warehouses",))
 class WarehouseViewSet(viewsets.ModelViewSet):
     queryset = Warehouse.objects.all().order_by("-created_at")
     serializer_class = WarehouseSerializer
@@ -341,6 +430,7 @@ class WarehouseViewSet(viewsets.ModelViewSet):
             target_label=target_label,
         )
 
+@extend_schema(tags=("Inventory",))
 class InventoryViewSet(viewsets.ModelViewSet):
     queryset = Inventory.objects.all().select_related(
         "product",
@@ -400,8 +490,22 @@ class InventoryViewSet(viewsets.ModelViewSet):
         )
 
     @extend_schema(
+        tags=("Inventory",),
+        description=(
+            "Atomically adjusts stock and creates an immutable inventory "
+            "movement. The resulting quantity cannot be negative."
+        ),
         request=InventoryAdjustmentSerializer,
-        responses={status.HTTP_201_CREATED: InventoryMovementSerializer},
+        responses={
+            status.HTTP_201_CREATED: InventoryMovementSerializer,
+            status.HTTP_400_BAD_REQUEST: OpenApiResponse(
+                response=VALIDATION_ERROR_SCHEMA,
+                description="The adjustment failed validation.",
+            ),
+            status.HTTP_401_UNAUTHORIZED: DetailResponseSerializer,
+            status.HTTP_403_FORBIDDEN: DetailResponseSerializer,
+            status.HTTP_404_NOT_FOUND: DetailResponseSerializer,
+        },
     )
     @action(
         detail=True,
@@ -425,9 +529,19 @@ class InventoryViewSet(viewsets.ModelViewSet):
         )
 
     @extend_schema(
+        tags=("Inventory",),
+        filters=False,
+        description=(
+            "Returns the paginated immutable movement history for this "
+            "inventory record, newest first."
+        ),
         responses={status.HTTP_200_OK: InventoryMovementSerializer(many=True)},
     )
-    @action(detail=True, methods=("get",), url_path="movements")
+    @action(
+        detail=True,
+        methods=("get",),
+        url_path="movements",
+    )
     def movements(self, request, *args, **kwargs):
         inventory = self.get_object()
         queryset = inventory.movements.select_related(
@@ -441,6 +555,13 @@ class InventoryViewSet(viewsets.ModelViewSet):
         return Response(InventoryMovementSerializer(queryset, many=True).data)
 
 
+@extend_schema(
+    tags=("Audit",),
+    description=(
+        "Read-only immutable activity. Access is limited to application "
+        "Admins and Auditors."
+    ),
+)
 class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = AuditLog.objects.select_related("actor").all()
     serializer_class = AuditLogSerializer
@@ -463,6 +584,7 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
     ordering_fields = ("created_at",)
     ordering = ("-created_at", "-id")
 
+@extend_schema(tags=("Orders",))
 class OrderViewSet(viewsets.ModelViewSet):
     queryset = Order.objects.all().select_related(
         "user",
@@ -522,8 +644,18 @@ class OrderViewSet(viewsets.ModelViewSet):
         super().perform_destroy(instance)
 
     @extend_schema(
+        tags=("Orders",),
+        description="Creates an order and deducts stock atomically.",
         request=OrderCreateSerializer,
-        responses={status.HTTP_201_CREATED: OrderSerializer},
+        responses={
+            status.HTTP_201_CREATED: OrderSerializer,
+            status.HTTP_400_BAD_REQUEST: OpenApiResponse(
+                response=VALIDATION_ERROR_SCHEMA,
+                description="The order failed validation or stock checks.",
+            ),
+            status.HTTP_401_UNAUTHORIZED: DetailResponseSerializer,
+            status.HTTP_403_FORBIDDEN: DetailResponseSerializer,
+        },
     )
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -542,8 +674,22 @@ class OrderViewSet(viewsets.ModelViewSet):
         )
 
     @extend_schema(
+        tags=("Orders",),
+        description=(
+            "Applies a permitted order state transition. Direct status "
+            "updates through PATCH are not supported."
+        ),
         request=OrderStatusUpdateSerializer,
-        responses={status.HTTP_200_OK: OrderSerializer},
+        responses={
+            status.HTTP_200_OK: OrderSerializer,
+            status.HTTP_400_BAD_REQUEST: OpenApiResponse(
+                response=VALIDATION_ERROR_SCHEMA,
+                description="The requested status transition is invalid.",
+            ),
+            status.HTTP_401_UNAUTHORIZED: DetailResponseSerializer,
+            status.HTTP_403_FORBIDDEN: DetailResponseSerializer,
+            status.HTTP_404_NOT_FOUND: DetailResponseSerializer,
+        },
     )
     @action(
         detail=True,
@@ -568,11 +714,22 @@ class OrderViewSet(viewsets.ModelViewSet):
         return Response(response_serializer.data)
 
     @extend_schema(
+        tags=("Orders",),
+        filters=False,
+        description=(
+            "Returns the complete chronological status history. The bounded "
+            "state machine keeps this response intentionally unpaginated."
+        ),
         responses={
             status.HTTP_200_OK: OrderStatusHistorySerializer(many=True),
         },
     )
-    @action(detail=True, methods=("get",), url_path="history")
+    @action(
+        detail=True,
+        methods=("get",),
+        url_path="history",
+        pagination_class=None,
+    )
     def history(self, request, *args, **kwargs):
         order = self.get_object()
         history = order.status_history.select_related(
@@ -581,15 +738,23 @@ class OrderViewSet(viewsets.ModelViewSet):
         return Response(OrderStatusHistorySerializer(history, many=True).data)
 
     @extend_schema(
+        tags=("Payments",),
         description=(
             "Process this order with the mock payment provider. Send an "
             "empty JSON object; amount and all payment fields are controlled "
             "by the server."
         ),
-        request=PaymentRequestSerializer,
+        request={"application/json": EMPTY_OBJECT_SCHEMA},
         responses={
             status.HTTP_200_OK: PaymentSerializer,
             status.HTTP_201_CREATED: PaymentSerializer,
+            status.HTTP_400_BAD_REQUEST: OpenApiResponse(
+                response=VALIDATION_ERROR_SCHEMA,
+                description="The order cannot be paid in its current state.",
+            ),
+            status.HTTP_401_UNAUTHORIZED: DetailResponseSerializer,
+            status.HTTP_403_FORBIDDEN: DetailResponseSerializer,
+            status.HTTP_404_NOT_FOUND: DetailResponseSerializer,
         },
     )
     @action(detail=True, methods=("post",), url_path="pay")

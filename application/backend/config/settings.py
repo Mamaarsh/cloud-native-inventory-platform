@@ -72,30 +72,40 @@ REST_FRAMEWORK = {
 }
 
 SPECTACULAR_SETTINGS = {
-    'TITLE': 'cloud Native Inventory platform API',
+    'TITLE': 'Cloud Native Inventory Platform API',
     'DESCRIPTION': (
-        'production-orented inventory and order management API'
+        'Production-oriented inventory and order management REST API.'
     ),
     'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'TAGS': [
+        {
+            'name': 'Authentication',
+            'description': 'JWT authentication and current-account operations.',
+        },
+        {
+            'name': 'Users',
+            'description': 'Administrator-managed application access.',
+        },
+        {'name': 'Products'},
+        {'name': 'Warehouses'},
+        {'name': 'Inventory'},
+        {'name': 'Orders'},
+        {'name': 'Payments'},
+        {
+            'name': 'Audit',
+            'description': 'Immutable administrative and operational activity.',
+        },
+        {
+            'name': 'Health',
+            'description': 'Process and dependency health probes.',
+        },
+    ],
     'ENUM_NAME_OVERRIDES': {
         'OrderStatusEnum': 'inventory.models.OrderStatus',
         'PaymentStatusEnum': 'inventory.models.PaymentStatus',
     },
-    'SECURITY': [
-        {
-            'BearerAuth': []
-        }
-    ],
     'COMPONENT_SPLIT_REQUEST': True,
-    'COMPONENTS': {
-        'securitySchemes': {
-            'BearerAuth': {
-                'type': 'http',
-                'scheme': 'bearer',
-                'bearerFormat': 'JWT',
-            }
-        }
-    }
 }
 
 MIDDLEWARE = [
