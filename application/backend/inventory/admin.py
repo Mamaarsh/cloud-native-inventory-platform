@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from .models import (
     AuditLog,
@@ -29,6 +30,7 @@ def _admin_changes(previous, current, fields):
 
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
+    actions = None
     list_display = (
         "id",
         "name",
@@ -44,6 +46,13 @@ class ProductAdmin(admin.ModelAdmin):
     list_filter = (
         "is_active",
     )
+
+    def has_delete_permission(self, request, obj=None):
+        if obj is not None and (
+            obj.inventories.exists() or obj.order_items.exists()
+        ):
+            return False
+        return super().has_delete_permission(request, obj)
 
     def save_model(self, request, obj, form, change):
         previous = Product.objects.get(pk=obj.pk) if change else None
@@ -82,6 +91,8 @@ class ProductAdmin(admin.ModelAdmin):
         )
 
     def delete_model(self, request, obj):
+        if obj.inventories.exists() or obj.order_items.exists():
+            raise PermissionDenied
         target_id = obj.pk
         target_label = f"{obj.name} · {obj.sku}"
         super().delete_model(request, obj)
@@ -94,6 +105,11 @@ class ProductAdmin(admin.ModelAdmin):
         )
 
     def delete_queryset(self, request, queryset):
+        if any(
+            product.inventories.exists() or product.order_items.exists()
+            for product in queryset
+        ):
+            raise PermissionDenied
         targets = [
             (product.pk, f"{product.name} · {product.sku}")
             for product in queryset
@@ -110,6 +126,7 @@ class ProductAdmin(admin.ModelAdmin):
 
 @admin.register(Warehouse)
 class WarehouseAdmin(admin.ModelAdmin):
+    actions = None
     list_display = (
         "id",
         "name",
@@ -120,6 +137,13 @@ class WarehouseAdmin(admin.ModelAdmin):
         "name",
         "location",
     )
+
+    def has_delete_permission(self, request, obj=None):
+        if obj is not None and (
+            obj.inventories.exists() or obj.order_items.exists()
+        ):
+            return False
+        return super().has_delete_permission(request, obj)
 
     def save_model(self, request, obj, form, change):
         previous = Warehouse.objects.get(pk=obj.pk) if change else None
@@ -152,6 +176,8 @@ class WarehouseAdmin(admin.ModelAdmin):
         )
 
     def delete_model(self, request, obj):
+        if obj.inventories.exists() or obj.order_items.exists():
+            raise PermissionDenied
         target_id = obj.pk
         target_label = obj.name
         super().delete_model(request, obj)
@@ -164,6 +190,11 @@ class WarehouseAdmin(admin.ModelAdmin):
         )
 
     def delete_queryset(self, request, queryset):
+        if any(
+            warehouse.inventories.exists() or warehouse.order_items.exists()
+            for warehouse in queryset
+        ):
+            raise PermissionDenied
         targets = [
             (warehouse.pk, warehouse.name)
             for warehouse in queryset
@@ -190,6 +221,19 @@ class InventoryAdmin(admin.ModelAdmin):
     list_filter = (
         "warehouse",
     )
+    readonly_fields = (
+        "quantity",
+        "updated_at",
+    )
+
+    def get_readonly_fields(self, request, obj=None):
+        readonly_fields = list(super().get_readonly_fields(request, obj))
+        if obj is not None:
+            readonly_fields.extend(("product", "warehouse"))
+        return tuple(readonly_fields)
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
@@ -270,7 +314,18 @@ class OrderAdmin(admin.ModelAdmin):
     )
     readonly_fields = (
         "status",
+        "created_at",
+        "updated_at",
     )
+
+    def get_readonly_fields(self, request, obj=None):
+        readonly_fields = list(super().get_readonly_fields(request, obj))
+        if obj is not None:
+            readonly_fields.append("user")
+        return tuple(readonly_fields)
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
     @transaction.atomic
     def save_model(self, request, obj, form, change):
@@ -390,6 +445,25 @@ class OrderItemAdmin(admin.ModelAdmin):
         "quantity",
         "unit_price",
     )
+    readonly_fields = (
+        "order",
+        "product",
+        "warehouse",
+        "quantity",
+        "unit_price",
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return request.method in {"GET", "HEAD"} and super().has_change_permission(
+            request,
+            obj,
+        )
 
 @admin.register(Payment)
 class PaymentAdmin(admin.ModelAdmin):
@@ -411,6 +485,27 @@ class PaymentAdmin(admin.ModelAdmin):
         "order__id",
         "order__user__username",
     )
+    readonly_fields = (
+        "order",
+        "amount",
+        "status",
+        "provider",
+        "provider_reference",
+        "created_at",
+        "updated_at",
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return request.method in {"GET", "HEAD"} and super().has_change_permission(
+            request,
+            obj,
+        )
 
 @admin.register(Notification)
 class NotificationAdmin(admin.ModelAdmin):
@@ -436,3 +531,30 @@ class NotificationAdmin(admin.ModelAdmin):
         "provider_reference",
         "idempotency_key",
     )
+    readonly_fields = (
+        "user",
+        "order",
+        "event_type",
+        "channel",
+        "status",
+        "message",
+        "provider_reference",
+        "idempotency_key",
+        "attempts",
+        "last_error",
+        "created_at",
+        "updated_at",
+        "sent_at",
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return request.method in {"GET", "HEAD"} and super().has_change_permission(
+            request,
+            obj,
+        )

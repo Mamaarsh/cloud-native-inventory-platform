@@ -11,11 +11,42 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 import os
+from datetime import timedelta
 from pathlib import Path
+from django.core.exceptions import ImproperlyConfigured
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+def _environment_boolean(name, default=False):
+    value = os.getenv(name)
+    if value is None:
+        return default
+    normalized_value = value.strip().lower()
+    if normalized_value in {"1", "true", "yes", "on"}:
+        return True
+    if normalized_value in {"0", "false", "no", "off"}:
+        return False
+    raise ImproperlyConfigured(
+        f"{name} must be one of: true, false, 1, 0, yes, no, on, off."
+    )
+
+def _environment_nonnegative_integer(name, default):
+    raw_value = os.getenv(name, str(default)).strip()
+    try:
+        value = int(raw_value)
+    except ValueError as exc:
+        raise ImproperlyConfigured(f"{name} must be an integer.") from exc
+    if value < 0:
+        raise ImproperlyConfigured(f"{name} must not be negative.")
+    return value
+
+def _environment_list(name, default):
+    return [
+        item.strip()
+        for item in os.getenv(name, default).split(",")
+        if item.strip()
+    ]
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
@@ -24,16 +55,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.environ["SECRET_KEY"]
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv(
-    "DEBUG",
-    "False"
-) == "True"
+DEBUG = _environment_boolean("DEBUG", False)
 
-ALLOWED_HOSTS = os.getenv(
+ALLOWED_HOSTS = _environment_list(
     "ALLOWED_HOSTS",
-    "localhost,127.0.0.1"
-).split(",")
-
+    "localhost,127.0.0.1",
+)
 
 # Application definition
 
@@ -69,6 +96,21 @@ REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 
         'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 10,
+}
+
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=5),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+    'ROTATE_REFRESH_TOKENS': False,
+    'BLACKLIST_AFTER_ROTATION': False,
+    'ALGORITHM': 'HS256',
+    'SIGNING_KEY': SECRET_KEY,
+    'AUTH_HEADER_TYPES': ('Bearer',),
+    'AUTH_TOKEN_CLASSES': (
+        'rest_framework_simplejwt.tokens.AccessToken',
+    ),
+    'CHECK_USER_IS_ACTIVE': True,
+    'CHECK_REVOKE_TOKEN': False,
 }
 
 SPECTACULAR_SETTINGS = {
@@ -117,6 +159,28 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+
+# Safe for both local HTTP development and production deployments.
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = 'DENY'
+SECURE_REFERRER_POLICY = 'same-origin'
+CSRF_COOKIE_HTTPONLY = True
+
+# HTTPS enforcement stays opt-in until TLS terminates at a trusted proxy.
+SECURE_SSL_REDIRECT = _environment_boolean('SECURE_SSL_REDIRECT', False)
+SESSION_COOKIE_SECURE = _environment_boolean('SESSION_COOKIE_SECURE', False)
+CSRF_COOKIE_SECURE = _environment_boolean('CSRF_COOKIE_SECURE', False)
+SECURE_HSTS_SECONDS = _environment_nonnegative_integer(
+    'SECURE_HSTS_SECONDS',
+    0,
+)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = _environment_boolean(
+    'SECURE_HSTS_INCLUDE_SUBDOMAINS',
+    False,
+)
+SECURE_HSTS_PRELOAD = _environment_boolean('SECURE_HSTS_PRELOAD', False)
+if _environment_boolean('TRUST_X_FORWARDED_PROTO', False):
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 ROOT_URLCONF = 'config.urls'
 

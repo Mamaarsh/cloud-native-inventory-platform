@@ -66,7 +66,6 @@ class ProductDeletionConflict(APIException):
     )
     default_code = "product_in_use"
 
-
 class WarehouseDeletionConflict(APIException):
     status_code = status.HTTP_409_CONFLICT
     default_detail = (
@@ -96,7 +95,6 @@ def _changed_values(before, instance, fields):
             }
     return changes
 
-
 @extend_schema(
     operation_id="health_liveness",
     tags=("Health",),
@@ -110,7 +108,6 @@ def _changed_values(before, instance, fields):
 def health_live(request):
     return Response({"status": "ok"})
 
-
 def _check_database():
     try:
         with connection.cursor() as cursor:
@@ -122,7 +119,6 @@ def _check_database():
             exc.__class__.__name__,
         )
     return "unavailable"
-
 
 def _check_redis():
     redis_client = None
@@ -150,7 +146,6 @@ def _check_redis():
                     exc.__class__.__name__,
                 )
     return "unavailable"
-
 
 @extend_schema(
     operation_id="health_readiness",
@@ -554,7 +549,6 @@ class InventoryViewSet(viewsets.ModelViewSet):
             return self.get_paginated_response(serializer.data)
         return Response(InventoryMovementSerializer(queryset, many=True).data)
 
-
 @extend_schema(
     tags=("Audit",),
     description=(
@@ -596,7 +590,7 @@ class OrderViewSet(viewsets.ModelViewSet):
                 "warehouse",
             ),
         )
-    )
+    ).order_by("-created_at", "-id")
     serializer_class = OrderSerializer
     permission_classes = (OrderPermission,)
     filter_backends = (

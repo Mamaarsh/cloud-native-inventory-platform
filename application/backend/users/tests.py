@@ -221,6 +221,7 @@ class UserRegistrationAPITests(APITestCase):
             is_superuser=True,
             role="Admin",
             permissions=["inventory.change_order"],
+            user_permissions=["inventory.change_user"],
         )
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
@@ -230,6 +231,7 @@ class UserRegistrationAPITests(APITestCase):
             "is_superuser",
             "role",
             "permissions",
+            "user_permissions",
         ):
             self.assertIn(field, response.json())
         self.assertFalse(
@@ -790,6 +792,31 @@ class AuthenticationAPITests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("access", response.json())
         self.assertIn("refresh", response.json())
+
+    def test_deactivated_user_cannot_refresh_or_use_existing_tokens(self):
+        refresh_token = RefreshToken.for_user(self.user)
+        self.user.is_active = False
+        self.user.save(update_fields=("is_active",))
+
+        refresh_response = self.client.post(
+            reverse("users:token-refresh"),
+            {"refresh": str(refresh_token)},
+            format="json",
+        )
+        self.client.credentials(
+            HTTP_AUTHORIZATION=f"Bearer {refresh_token.access_token}",
+        )
+        authenticated_response = self.client.get(reverse("users:me"))
+
+        self.assertEqual(
+            refresh_response.status_code,
+            status.HTTP_401_UNAUTHORIZED,
+        )
+        self.assertNotIn("access", refresh_response.json())
+        self.assertEqual(
+            authenticated_response.status_code,
+            status.HTTP_401_UNAUTHORIZED,
+        )
 
 
 class PasswordChangeAPITests(APITestCase):

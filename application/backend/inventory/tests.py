@@ -1245,6 +1245,27 @@ class ProductImageAPITests(APITestCase):
         self.assertIn("image", response.json())
         self.assertFalse(Product.objects.exists())
 
+    def test_image_with_executable_filename_extension_is_rejected(self):
+        response = self.create_product(
+            self.image_upload("product.html", "PNG")
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("image", response.json())
+        self.assertFalse(Product.objects.exists())
+
+    def test_image_content_must_match_filename_extension(self):
+        response = self.create_product(
+            self.image_upload("product.jpg", "PNG")
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn(
+            "filename extension does not match",
+            response.json()["image"][0],
+        )
+        self.assertFalse(Product.objects.exists())
+
     def test_persian_product_name_is_preserved_with_image(self):
         response = self.create_product(
             self.image_upload(),
