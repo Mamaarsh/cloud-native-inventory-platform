@@ -1,6 +1,5 @@
 from django.contrib import admin
 from django.core.exceptions import PermissionDenied
-from django.db import transaction
 from .models import (
     AuditLog,
     Inventory,
@@ -324,27 +323,11 @@ class OrderAdmin(admin.ModelAdmin):
             readonly_fields.append("user")
         return tuple(readonly_fields)
 
-    def has_delete_permission(self, request, obj=None):
+    def has_add_permission(self, request):
         return False
 
-    @transaction.atomic
-    def save_model(self, request, obj, form, change):
-        super().save_model(request, obj, form, change)
-        if not change:
-            OrderStatusHistory.objects.create(
-                order=obj,
-                from_status=None,
-                to_status=obj.status,
-                performed_by=request.user,
-            )
-            record_audit_event(
-                actor=request.user,
-                action=AuditLog.Action.ORDER_CREATED,
-                target_type=AuditLog.TargetType.ORDER,
-                target_id=obj.pk,
-                target_label=f"Order #{obj.pk}",
-                metadata={"item_count": 0},
-            )
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 @admin.register(OrderStatusHistory)
 class OrderStatusHistoryAdmin(admin.ModelAdmin):

@@ -13,6 +13,7 @@ from .models import (
     Notification,
     Order,
     OrderItem,
+    OrderStatusHistory,
     Payment,
     Product,
     Warehouse,
@@ -187,11 +188,88 @@ class DjangoAdminWorkflowSecurityTests(TestCase):
         request = RequestFactory().get("/admin/inventory/order/")
         request.user = self.superuser
 
+        inspection_response = self.client.get(
+            reverse("admin:inventory_order_change", args=(order.pk,))
+        )
+
+        self.assertEqual(inspection_response.status_code, status.HTTP_200_OK)
         self.assertSetEqual(
             set(order_admin.get_readonly_fields(request, order)),
             {"user", "status", "created_at", "updated_at"},
         )
         self.assertFalse(order_admin.has_delete_permission(request, order))
+
+    def test_admin_order_creation_is_disabled(self):
+        order_admin = django_admin.site._registry[Order]
+        request = RequestFactory().get("/admin/inventory/order/add/")
+        request.user = self.superuser
+
+        get_response = self.client.get(reverse("admin:inventory_order_add"))
+        post_response = self.client.post(
+            reverse("admin:inventory_order_add"),
+            {"user": self.superuser.pk, "_save": "Save"},
+        )
+
+        self.assertFalse(order_admin.has_add_permission(request))
+        self.assertEqual(get_response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(post_response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertFalse(Order.objects.exists())
+
+
+class AuthoritativeOrderCreationAPITests(APITestCase):
+    @classmethod
+    def setUpTestData(cls):
+        admin_group = Group.objects.create(name="Admin")
+        cls.user = get_user_model().objects.create_user(
+            username="authoritative-order-admin",
+        )
+        cls.user.groups.add(admin_group)
+        cls.product = Product.objects.create(
+            name="Authoritative Order Product",
+            sku="AUTHORITATIVE-ORDER-001",
+            price="15.00",
+        )
+        cls.warehouse = Warehouse.objects.create(
+            name="Authoritative Order Warehouse",
+            location="Central",
+        )
+
+    def setUp(self):
+        self.client.force_authenticate(self.user)
+        self.inventory = Inventory.objects.create(
+            product=self.product,
+            warehouse=self.warehouse,
+            quantity=5,
+        )
+
+    def test_normal_api_order_creation_remains_unaffected(self):
+        response = self.client.post(
+            reverse("order-list"),
+            {
+                "items": [
+                    {
+                        "product": self.product.pk,
+                        "warehouse": self.warehouse.pk,
+                        "quantity": 2,
+                    }
+                ]
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        order = Order.objects.get(pk=response.json()["id"])
+        self.assertEqual(order.user, self.user)
+        self.assertEqual(order.items.count(), 1)
+        self.inventory.refresh_from_db()
+        self.assertEqual(self.inventory.quantity, 3)
+        self.assertTrue(
+            OrderStatusHistory.objects.filter(
+                order=order,
+                from_status__isnull=True,
+                to_status=Order.Status.PENDING,
+            ).exists()
+        )
 
 
 class DeterministicOrderPaginationTests(APITestCase):

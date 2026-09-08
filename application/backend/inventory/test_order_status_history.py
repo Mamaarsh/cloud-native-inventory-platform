@@ -2,14 +2,11 @@ from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
 from threading import Barrier
 from unittest.mock import patch
-from django.contrib import admin as django_admin
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError, close_old_connections, connection, transaction
 from django.test import (
-    RequestFactory,
-    TestCase,
     TransactionTestCase,
     skipUnlessDBFeature,
 )
@@ -91,50 +88,6 @@ class OrderStatusHistoryCreationTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertFalse(Order.objects.exists())
         self.assertFalse(OrderStatusHistory.objects.exists())
-
-class OrderStatusHistoryAdminTests(TestCase):
-    @classmethod
-    def setUpTestData(cls):
-        cls.user = get_user_model().objects.create_user(
-            username="history-admin-creator",
-            is_staff=True,
-        )
-
-    def setUp(self):
-        self.request = RequestFactory().post("/admin/inventory/order/add/")
-        self.request.user = self.user
-        self.order_admin = django_admin.site._registry[Order]
-
-    def test_admin_created_order_gets_initial_event_and_read_only_status(self):
-        order = Order(user=self.user)
-        self.order_admin.save_model(
-            self.request,
-            order,
-            form=None,
-            change=False,
-        )
-        event = OrderStatusHistory.objects.get(order=order)
-        self.assertEqual(event.to_status, Order.Status.PENDING)
-        self.assertEqual(event.performed_by, self.user)
-        self.assertIn(
-            "status",
-            self.order_admin.get_readonly_fields(self.request, order),
-        )
-
-    def test_admin_creation_rolls_back_if_history_creation_fails(self):
-        order = Order(user=self.user)
-        with patch(
-            "inventory.admin.OrderStatusHistory.objects.create",
-            side_effect=IntegrityError("Simulated admin history failure"),
-        ):
-            with self.assertRaises(IntegrityError):
-                self.order_admin.save_model(
-                    self.request,
-                    order,
-                    form=None,
-                    change=False,
-                )
-        self.assertFalse(Order.objects.exists())
 
 class OrderStatusHistoryTransitionTests(APITestCase):
     @classmethod
