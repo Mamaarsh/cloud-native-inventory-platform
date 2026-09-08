@@ -33,10 +33,9 @@ db.sqlite3-journal
 # Logs
 *.log
 
-# Generated static/media files
-staticfiles/
-static/
-media/
+# Generated backend static/media files
+/application/backend/staticfiles/
+/application/backend/media/
 
 # =========================
 # Environment Variables
@@ -46,6 +45,12 @@ media/
 
 # Keep environment templates in Git
 !.env.example
+
+# Local private key material
+*.pem
+*.key
+*.p12
+*.pfx
 
 # =========================
 # Frontend / Node.js

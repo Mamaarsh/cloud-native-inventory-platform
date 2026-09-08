@@ -9,6 +9,15 @@ __pycache__/
 *.so
 
 # =========================
+# Python Build Artifacts
+# =========================
+
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# =========================
 # Virtual Environment
 # =========================
 
@@ -24,9 +33,8 @@ ENV/
 db.sqlite3
 db.sqlite3-journal
 *.log
-staticfiles/
-static/
-media/
+/staticfiles/
+/media/
 
 # =========================
 # Environment
@@ -34,6 +42,12 @@ media/
 
 .env
 .env.*
+
+# Local private key material
+*.pem
+*.key
+*.p12
+*.pfx
 
 # =========================
 # Git
@@ -63,5 +77,16 @@ Thumbs.db
 .pytest_cache/
 .coverage
 htmlcov/
+.tox/
+.nox/
 .mypy_cache/
 .ruff_cache/
+
+# =========================
+# Local / Temporary Files
+# =========================
+
+*.tmp
+*.bak
+*.swp
+*.swo

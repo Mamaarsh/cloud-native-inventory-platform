@@ -22,6 +22,12 @@ dist/
 # Keep example environment file if needed
 !.env.example
 
+# Local private key material
+*.pem
+*.key
+*.p12
+*.pfx
+
 # =========================
 # Package Manager Logs
 # =========================
