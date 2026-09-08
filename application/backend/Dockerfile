@@ -1,5 +1,7 @@
 # ---------- Builder Stage ----------
-FROM python:3.14-slim AS builder
+ARG PYTHON_BASE_IMAGE=python:3.14-slim
+
+FROM ${PYTHON_BASE_IMAGE} AS builder
 
 ENV PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
@@ -14,7 +16,7 @@ RUN python -m pip install --upgrade pip \
         -r requirements.txt
 
 # ---------- Runtime Stage ----------
-FROM python:3.14-slim AS runtime
+FROM ${PYTHON_BASE_IMAGE} AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \

@@ -2,6 +2,8 @@ services:
   backend:
     build:
       context: ./application/backend
+      args:
+        PYTHON_BASE_IMAGE: ${NEXUS_DOCKER_GROUP}/python:3.14-slim
     container_name: inventory-backend
     restart: unless-stopped
     env_file:
@@ -19,29 +21,42 @@ services:
       DB_PASSWORD: ${DB_PASSWORD}
       DB_HOST: ${DB_HOST}
       DB_PORT: ${DB_PORT}
-
       CELERY_BROKER_URL: ${CELERY_BROKER_URL}
       CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND}
-
       SECRET_KEY: ${SECRET_KEY}
       DEBUG: ${DEBUG}
       ALLOWED_HOSTS: ${ALLOWED_HOSTS}
+      SECURE_SSL_REDIRECT: ${SECURE_SSL_REDIRECT}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE}
+      CSRF_COOKIE_SECURE: ${CSRF_COOKIE_SECURE}
+      SECURE_HSTS_SECONDS: ${SECURE_HSTS_SECONDS}
+      SECURE_HSTS_INCLUDE_SUBDOMAINS: ${SECURE_HSTS_INCLUDE_SUBDOMAINS}
+      SECURE_HSTS_PRELOAD: ${SECURE_HSTS_PRELOAD}
+      TRUST_X_FORWARDED_PROTO: ${TRUST_X_FORWARDED_PROTO}
     volumes:
       - media_data:/app/media
     networks:
       - inventory_network
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health/live/', timeout=3)"]
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health/live/', timeout=3)"
+        ]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 20s
-    
+
   frontend:
     build:
       context: ./application/frontend
       args:
         VITE_API_URL: /api
+        NODE_BASE_IMAGE: ${NEXUS_DOCKER_GROUP}/node:22-alpine
+        NGINX_BASE_IMAGE: ${NEXUS_DOCKER_GROUP}/nginx:alpine
     container_name: inventory-frontend
     restart: unless-stopped
     ports:
@@ -53,7 +68,7 @@ services:
       - inventory_network
 
   postgres:
-    image: postgres:16-alpine
+    image: ${NEXUS_DOCKER_GROUP}/postgres:16-alpine
     container_name: inventory-postgres
     restart: unless-stopped
     environment:
@@ -65,19 +80,28 @@ services:
     networks:
       - inventory_network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${DB_USER} -d ${DB_NAME}"
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
-  
+
   redis:
-    image: redis:7-alpine
+    image: ${NEXUS_DOCKER_GROUP}/redis:7-alpine
     container_name: inventory-redis
     restart: unless-stopped
     networks:
       - inventory_network
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test:
+        [
+          "CMD",
+          "redis-cli",
+          "ping"
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
