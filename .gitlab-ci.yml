@@ -40,7 +40,8 @@ backend-build:
   image: docker:latest
   script:
     - echo "Building Docker image"
-    - docker build \
-      -t inventory-backend:$CI_COMMIT_SHORT_SHA \
-      -f application/backend/Dockerfile \
-      .
+    - |
+      docker build \
+        -t inventory-backend:$CI_COMMIT_SHORT_SHA \
+        -f application/backend/Dockerfile \
+        .
