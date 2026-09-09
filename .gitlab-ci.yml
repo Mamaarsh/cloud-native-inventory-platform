@@ -1,14 +1,14 @@
 stages:
   - test
 
-hello-ci:
+backend-test:
   stage: test
   tags:
     - inventory-runner
   script:
-    - echo "GitLab CI is working"
-    - echo "Running on GitLab Runner"
-    - echo "Runner user:"
-    - whoami
-    - echo "Runner hostname:"
-    - hostname
+    - echo "Starting backend tests"
+    - cd application/backend
+    - python3 --version
+    - pip3 install -r requirements.txt
+    - python3 manage.py check
+    - python3 manage.py test
