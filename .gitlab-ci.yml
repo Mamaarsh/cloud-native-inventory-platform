@@ -6,11 +6,23 @@ backend-test:
   tags:
     - inventory-runner
   image: python:3.14
+  services:
+    - name: postgres:16
+      alias: postgres
+  variables:
+    POSTGRES_DB: inventory-test
+    POSTGRES_USER: inventory_user
+    POSTGRES_PASSWORD: inventory_password
+
+    DB_NAME: inventory-test
+    DB_USER: inventory_user
+    DB_PASSWORD: inventory_password
+    DB_HOST: postgres
+    DB_PORT: 5432
   script:
     - echo "Running backend tests inside Docker"
-    - python --version
     - cd application/backend
-    - pip install --upgrade pip
+    - python --version
     - pip install -r requirements.txt
     - python manage.py check
     - python manage.py test
