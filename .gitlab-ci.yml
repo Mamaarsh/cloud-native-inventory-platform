@@ -40,16 +40,8 @@ backend-build:
   image: docker:latest
   script:
     - echo "Building Docker image"
-    - docker build \
-        -t inventory-backend:$CI_COMMIT_SHORT_SHA \
-        application/backend
+    - docker build -t inventory-backend:$CI_COMMIT_SHORT_SHA application/backend
     - echo "Login to Nexus registry"
-    - docker login \
-        -u "$NEXUS_USERNAME" \
-        -p "$NEXUS_PASSWORD" \
-        "$NEXUS_REGISTRY"
-    - docker tag \
-        inventory-backend:$CI_COMMIT_SHORT_SHA \
-        $NEXUS_REGISTRY/inventory/backend:$CI_COMMIT_SHORT_SHA
-    - docker push \
-        $NEXUS_REGISTRY/inventory/backend:$CI_COMMIT_SHORT_SHA
+    - docker login -u "$NEXUS_USERNAME" -p "$NEXUS_PASSWORD" "$NEXUS_REGISTRY"
+    - docker tag inventory-backend:$CI_COMMIT_SHORT_SHA $NEXUS_REGISTRY/inventory/backend:$CI_COMMIT_SHORT_SHA
+    - docker push $NEXUS_REGISTRY/inventory/backend:$CI_COMMIT_SHORT_SHA
