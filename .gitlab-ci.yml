@@ -3,7 +3,12 @@ stages:
 
 hello-ci:
   stage: test
+  tags:
+    - inventory-runner
   script:
     - echo "GitLab CI is working"
     - echo "Running on GitLab Runner"
+    - echo "Runner user:"
+    - whoami
+    - echo "Runner hostname:"
     - hostname
