@@ -5,10 +5,12 @@ backend-test:
   stage: test
   tags:
     - inventory-runner
+  image: python:3.14
   script:
-    - echo "Starting backend tests"
+    - echo "Running backend tests inside Docker"
+    - python --version
     - cd application/backend
-    - python3 --version
-    - pip3 install -r requirements.txt
-    - python3 manage.py check
-    - python3 manage.py test
+    - pip install --upgrade pip
+    - pip install -r requirements.txt
+    - python manage.py check
+    - python manage.py test
