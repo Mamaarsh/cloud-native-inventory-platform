@@ -1,6 +1,6 @@
 workflow:
   auto_cancel:
-    on_new_commit: interruptible
+    on_new_commit: conservative
 
 default:
   interruptible: true
