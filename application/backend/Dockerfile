@@ -1,5 +1,5 @@
 # ---------- Builder Stage ----------
-ARG PYTHON_BASE_IMAGE=python:3.14-slim
+ARG PYTHON_BASE_IMAGE=192.168.122.1:8083/python:3.14-slim
 
 FROM ${PYTHON_BASE_IMAGE} AS builder
 

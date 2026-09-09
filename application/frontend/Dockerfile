@@ -1,6 +1,6 @@
 # ---------- Builder ----------
-ARG NODE_BASE_IMAGE=node:22-alpine
-ARG NGINX_BASE_IMAGE=nginx:alpine
+ARG NODE_BASE_IMAGE=192.168.122.1:8083/node:22-alpine
+ARG NGINX_BASE_IMAGE=192.168.122.1:8083/nginx:alpine
 
 FROM ${NODE_BASE_IMAGE} AS builder
 

@@ -11,9 +11,9 @@ backend-test:
   stage: test
   tags:
     - inventory-runner
-  image: python:3.14
+  image: 192.168.122.1:8083/python:3.14
   services:
-    - name: postgres:16
+    - name: 192.168.122.1:8083/postgres:16
       alias: postgres
   variables:
     POSTGRES_DB: inventory-test
@@ -37,11 +37,15 @@ backend-build:
   stage: build
   tags:
     - inventory-runner
-  image: docker:latest
+  image: 192.168.122.1:8083/docker:latest
   script:
     - echo "Building Docker image"
     - docker build -t inventory-backend:$CI_COMMIT_SHORT_SHA application/backend
     - echo "Login to Nexus registry"
-    - docker login -u "$NEXUS_USERNAME" -p "$NEXUS_PASSWORD" "$NEXUS_REGISTRY"
+    - echo "$NEXUS_PASSWORD" | docker login -u "$NEXUS_USERNAME" --password-stdin "$NEXUS_REGISTRY"
+    - echo "Tagging image"
     - docker tag inventory-backend:$CI_COMMIT_SHORT_SHA $NEXUS_REGISTRY/inventory/backend:$CI_COMMIT_SHORT_SHA
+    - docker tag inventory-backend:$CI_COMMIT_SHORT_SHA $NEXUS_REGISTRY/inventory/backend:latest
+    - echo "Pushing image"
     - docker push $NEXUS_REGISTRY/inventory/backend:$CI_COMMIT_SHORT_SHA
+    - docker push $NEXUS_REGISTRY/inventory/backend:latest
