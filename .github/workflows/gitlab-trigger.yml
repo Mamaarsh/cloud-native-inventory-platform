@@ -11,6 +11,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Push changes to Hamgit
         run: |
           git remote add hamgit https://${{ secrets.HAMGIT_USERNAME }}:${{ secrets.HAMGIT_TOKEN }}@hamgit.ir/Mamaarsh/cloud-native-inventory-platform.git || true
