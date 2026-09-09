@@ -14,7 +14,7 @@ jobs:
       - name: Push changes to Hamgit
         run: |
           git remote add hamgit https://${{ secrets.HAMGIT_USERNAME }}:${{ secrets.HAMGIT_TOKEN }}@hamgit.ir/Mamaarsh/cloud-native-inventory-platform.git || true
-          git push hamgit main --force
+          git push hamgit main
       - name: Cancel previous GitLab pipelines
         run: |
           curl --request GET \
