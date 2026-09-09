@@ -1,0 +1,17 @@
+name: Trigger GitLab CI Pipeline
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  trigger-gitlab:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger GitLab Pipeline
+        run: |
+          curl -X POST \
+            -F token=${{ secrets.GITLAB_TRIGGER_TOKEN }} \
+            -F ref=main \
+            https://hamgit.ir/api/v4/projects/48015/trigger/pipeline
