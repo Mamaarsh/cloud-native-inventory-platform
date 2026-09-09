@@ -1,4 +1,4 @@
-name: Trigger GitLab CI Pipeline
+name: Sync and Trigger GitLab CI Pipeline
 
 on:
   push:
@@ -6,13 +6,21 @@ on:
       - main
 
 concurrency:
-  group: gitlab-trigger-main
+  group: gitlab-sync-main
   cancel-in-progress: true
 
 jobs:
-  trigger-gitlab:
+  sync-trigger:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Push changes to Hamgit
+        run: |
+          git remote add hamgit https://${{ secrets.HAMGIT_USERNAME }}:${{ secrets.HAMGIT_TOKEN }}@hamgit.ir/Mamaarsh/cloud-native-inventory-platform.git
+          git push hamgit main --force
       - name: Trigger GitLab Pipeline
         run: |
           curl --fail \
