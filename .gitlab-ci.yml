@@ -1,9 +1,7 @@
 workflow:
-  auto_cancel:
-    on_new_commit: conservative
-
-default:
-  interruptible: true
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "trigger"'
+    - when: never
 
 stages:
   - test
