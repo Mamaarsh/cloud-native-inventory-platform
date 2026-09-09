@@ -5,14 +5,17 @@ on:
     branches:
       - main
 
+concurrency:
+  group: gitlab-trigger-main
+  cancel-in-progress: true
+
 jobs:
   trigger-gitlab:
     runs-on: ubuntu-latest
     steps:
       - name: Trigger GitLab Pipeline
         run: |
-          curl --fail --silent --show-error \
-          --request POST \
-          --form token=${{ secrets.GITLAB_TRIGGER_TOKEN }} \
-          --form ref=main \
+          curl --fail \
+          -F token=${{ secrets.GITLAB_TRIGGER_TOKEN }} \
+          -F ref=main \
           https://hamgit.ir/api/v4/projects/48015/trigger/pipeline
