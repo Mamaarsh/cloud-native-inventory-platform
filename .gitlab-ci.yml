@@ -1,0 +1,9 @@
+stages:
+  - test
+
+hello-ci:
+  stage: test
+  script:
+    - echo "GitLab CI is working"
+    - echo "Running on GitLab Runner"
+    - hostname
