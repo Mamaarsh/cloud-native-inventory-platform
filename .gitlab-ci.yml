@@ -33,23 +33,14 @@ backend-test:
     - python manage.py check
     - python manage.py test
 
-docker-check:
-  stage: test
+backend-build:
+  stage: build
   tags:
     - inventory-runner
   image: docker:latest
   script:
-    - docker version
-
-
-
-#backend-build:
-  #stage: build
-  #tags:
-   # - inventory-runner
-  #script:
-   # - echo "Building Docker image"
-    #- docker build \
-     # -t inventory-backend:$CI_COMMIT_SHORT_SHA \
-      #-f application/backend/Dockerfile \
-      #.
+    - echo "Building Docker image"
+    - docker build \
+      -t inventory-backend:$CI_COMMIT_SHORT_SHA \
+      -f application/backend/Dockerfile \
+      .
