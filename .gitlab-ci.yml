@@ -1,8 +1,13 @@
+workflow:
+  auto_cancel:
+    on_new_commit: interruptible
+
 stages:
   - test
 
 backend-test:
   stage: test
+  interruptible: true
   tags:
     - inventory-runner
   image: python:3.14
