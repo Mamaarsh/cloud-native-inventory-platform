@@ -4,26 +4,32 @@ on:
   push:
     branches:
       - main
-
-concurrency:
-  group: gitlab-sync-main
-  cancel-in-progress: true
-
+      
 jobs:
   sync-trigger:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - name: Push changes to Hamgit
         run: |
-          git remote add hamgit https://${{ secrets.HAMGIT_USERNAME }}:${{ secrets.HAMGIT_TOKEN }}@hamgit.ir/Mamaarsh/cloud-native-inventory-platform.git
+          git remote add hamgit git@hamgit.ir:Mamaarsh/cloud-native-inventory-platform.git || true
           git push hamgit main --force
+      - name: Cancel previous GitLab pipelines
+        run: |
+          curl --request GET \
+          --header "PRIVATE-TOKEN: ${{ secrets.GITLAB_TOKEN }}" \
+          "https://hamgit.ir/api/v4/projects/48015/pipelines?ref=main&status=running" \
+          | jq -r '.[].id' \
+          | while read id; do
+              curl --request POST \
+              --header "PRIVATE-TOKEN: ${{ secrets.GITLAB_TOKEN }}" \
+              "https://hamgit.ir/api/v4/projects/48015/pipelines/$id/cancel"
+            done
       - name: Trigger GitLab Pipeline
         run: |
           curl --fail \
-          -F token=${{ secrets.GITLAB_TRIGGER_TOKEN }} \
-          -F ref=main \
+          --request POST \
+          --form token=${{ secrets.GITLAB_TRIGGER_TOKEN }} \
+          --form ref=main \
           https://hamgit.ir/api/v4/projects/48015/trigger/pipeline
