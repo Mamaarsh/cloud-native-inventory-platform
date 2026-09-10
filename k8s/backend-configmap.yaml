@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-config
+  namespace: inventory
+  labels:
+    app.kubernetes.io/name: backend
+    app.kubernetes.io/part-of: cloud-native-inventory-platform
+data:
+  DB_NAME: inventory
+  DB_HOST: postgres
+  DB_PORT: "5432"
