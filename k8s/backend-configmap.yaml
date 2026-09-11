@@ -10,3 +10,4 @@ data:
   DB_NAME: inventory
   DB_HOST: postgres
   DB_PORT: "5432"
+  ALLOWED_HOSTS: "inventory.local,localhost,127.0.0.1"
