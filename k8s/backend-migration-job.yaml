@@ -23,10 +23,12 @@ spec:
         - name: migrate
           image: nexus.local:8084/inventory/backend:latest
           command: 
-            - python
-            - manage.py
-            - migrate
-            - --noinput
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              python manage.py migrate --noinput
+              python manage.py create_roles
           envFrom:
             - configMapRef:
                 name: backend-config
