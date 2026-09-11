@@ -58,7 +58,7 @@ backend-build:
 frontend-test:
   stage: test
   tags:
-    - invntory-runner
+    - inventory-runner
   image:
     name: 192.168.122.1:8083/node:22-alpine
     pull_policy: if-not-present
