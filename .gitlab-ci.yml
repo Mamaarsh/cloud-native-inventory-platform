@@ -55,6 +55,43 @@ backend-build:
     - docker push $NEXUS_REGISTRY/inventory/backend:$CI_COMMIT_SHORT_SHA
     - docker push $NEXUS_REGISTRY/inventory/backend:latest
 
+frontend-test:
+  stage: test
+  tags:
+    - invntory-runner
+  image:
+    name: 192.168.122.1:8083/node:22-alpine
+    pull_policy: if-not-present
+  variables:
+    VITE_API_URL: "/api"
+  script:
+    - echo "Running frontend checks"
+    - cd application/frontend
+    - node --version
+    - npm --version
+    - npm ci
+    - npm run lint
+    - npm run build
+
+frontend-build:
+  stage: build
+  tags:
+    - inventory-runner
+  image:
+    name: 192.168.122.1:8083/docker:latest
+    pull_policy: if-not-present
+  script:
+    - echo "Building frontend Docker image"
+    - docker build --build-arg VITE_API_URL=/api -t inventory-frontend:$CI_COMMIT_SHORT_SHA application/frontend
+    - echo "Login to Nexus registry"
+    - echo "$NEXUS_PASSWORD" | docker login -u "$NEXUS_USERNAME" --password-stdin "$NEXUS_REGISTRY"
+    - echo "Tagging frontend image"
+    - docker tag inventory-frontend:$CI_COMMIT_SHORT_SHA $NEXUS_REGISTRY/inventory/frontend:$CI_COMMIT_SHORT_SHA
+    - docker tag inventory-frontend:$CI_COMMIT_SHORT_SHA $NEXUS_REGISTRY/inventory/frontend:latest
+    - echo "Pushing frontend image"
+    - docker push $NEXUS_REGISTRY/inventory/frontend:$CI_COMMIT_SHORT_SHA
+    - docker push $NEXUS_REGISTRY/inventory/frontend:latest
+
 cleanup:
   stage: cleanup
   tags:
