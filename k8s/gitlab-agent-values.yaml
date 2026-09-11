@@ -1,0 +1,17 @@
+replicas: 1
+image:
+  repository: nexus.local:8084/infrastructure/gitlab-agent
+  pullPolicy: IfNotPresent
+  tag: v18.11.0
+imagePullSecrets:
+  - name: nexus-registry-secret
+rbac:
+  create: false
+serviceAccount:
+  create: false
+  name: gitlab-deployer
+config:
+  kasAddress: "wss://hamgit.ir/-/kubernetes-agent/"
+  secretName: gitlab-agent-token
+  operational_container_scanning:
+    enabled: false
