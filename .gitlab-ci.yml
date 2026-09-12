@@ -6,6 +6,7 @@ workflow:
 stages:
   - test
   - build
+  - deploy
   - cleanup
 
 backend-test:
@@ -111,6 +112,54 @@ kubernetes-agent-test:
       SECRET_ACCESS="$(kubectl auth can-i get secrets -n inventory || true)"
       echo "Can read secrets: $SECRET_ACCESS"
       test "$SECRET_ACCESS" = "no"
+
+deploy-kubernetes:
+  stage: deploy
+  tags:
+    - inventory-runner
+  image:
+    name: 192.168.122.1:8083/alpine/kubectl:1.35.4
+    pull_policy: if-not-present
+    entrypoint: [""]
+  variables:
+    K8S_NAMESPACE: "inventory"
+    K8S_REGISTRY: "nexus.local:8084"
+  script:
+    - echo "Selecting Kubernetes Agent context"
+    - kubectl config use-context "$CI_PROJECT_PATH:inventory-lab"
+    - echo "Creating migration job for commit $CI_COMMIT_SHORT_SHA"
+    - export MIGRATION_JOB="backend-migration-$CI_COMMIT_SHORT_SHA"
+    - |
+      sed \
+        -e "s/name: backend-migration/name: ${MIGRATION_JOB}/" \
+        -e "s#nexus.local:8084/inventory/backend:latest#${K8S_REGISTRY}/inventory/backend:${CI_COMMIT_SHORT_SHA}#" \
+        k8s/backend-migration-job.yaml \
+      | kubectl create -f -
+    - echo "Waiting for database migrations"
+    - |
+      if ! kubectl wait \
+        --for=condition=complete \
+        "job/${MIGRATION_JOB}" \
+        -n "$K8S_NAMESPACE" \
+        --timeout=180s
+      then
+        echo "Migration failed or timed out"
+        kubectl logs \
+          -n "$K8S_NAMESPACE" \
+          "job/${MIGRATION_JOB}" \
+          --all-containers=true || true
+        exit 1
+      fi
+    - echo "Migration completed successfully"
+    - echo "Deploying backend image $CI_COMMIT_SHORT_SHA"
+    - kubectl -n "$K8S_NAMESPACE" set image deployment/backend backend="${K8S_REGISTRY}/inventory/backend:${CI_COMMIT_SHORT_SHA}"
+    - echo "Waiting for backend rollout"
+    - kubectl -n "$K8S_NAMESPACE" rollout status deployment/backend --timeout=180s
+    - echo "Deploying frontend image $CI_COMMIT_SHORT_SHA"
+    - kubectl -n "$K8S_NAMESPACE" set image deployment/frontend frontend="${K8S_REGISTRY}/inventory/frontend:${CI_COMMIT_SHORT_SHA}"
+    - echo "Waiting for frontend rollout"
+    - kubectl -n "$K8S_NAMESPACE" rollout status deployment/frontend --timeout=180s
+    - echo "Kubernetes deployment completed successfully"
 
 cleanup:
   stage: cleanup
