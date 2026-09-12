@@ -124,6 +124,9 @@ deploy-kubernetes:
   variables:
     K8S_NAMESPACE: "inventory"
     K8S_REGISTRY: "nexus.local:8084"
+  environment:
+    name: production
+    url: http://inventory.local:30632
   script:
     - echo "Selecting Kubernetes Agent context"
     - kubectl config use-context "$CI_PROJECT_PATH:inventory-lab"
