@@ -71,7 +71,17 @@ rules:
       - get
       - list
       - watch
+      - create
+      - update
       - patch
+  - apiGroups:
+      - apps
+    resources:
+      - replicasets
+    verbs:
+      - get
+      - list
+      - watch
   # GitLab CD can create and monitor migration Jobs.
   - apiGroups:
       - batch
@@ -82,6 +92,7 @@ rules:
       - list
       - watch
       - create
+      - delete
   # Useful for observing migration Pods and reading logs
   # when a deployment fails.
   - apiGroups:
@@ -98,6 +109,28 @@ rules:
       - pods/log
     verbs:
       - get
+  - apiGroups:
+      - ""
+    resources:
+      - services
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+  - apiGroups:
+      - networking.k8s.io
+    resources:
+      - ingresses
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
 
 ---
 apiVersion: rbac.authorization.k8s.io/v1
