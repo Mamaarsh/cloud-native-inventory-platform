@@ -1,6 +1,6 @@
 # ---------- Builder ----------
 ARG NODE_BASE_IMAGE=192.168.122.1:8083/node:22-alpine
-ARG NGINX_BASE_IMAGE=192.168.122.1:8083/nginx:alpine
+ARG NGINX_BASE_IMAGE=192.168.122.1:8083/nginx-unprivileged:alpine
 
 FROM ${NODE_BASE_IMAGE} AS builder
 
@@ -24,6 +24,6 @@ COPY --from=builder /app/dist /usr/share/nginx/html
 
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-EXPOSE 80
+EXPOSE 8080
 
 CMD ["nginx", "-g", "daemon off;"]
