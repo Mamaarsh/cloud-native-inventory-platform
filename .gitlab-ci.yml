@@ -130,6 +130,14 @@ deploy-kubernetes:
   script:
     - echo "Selecting Kubernetes Agent context"
     - kubectl config use-context "$CI_PROJECT_PATH:inventory-lab"
+    - echo "Applying Kubernetes manifests"
+    - kubectl apply -f k8s/namespace.yaml
+    - kubectl apply -f k8s/backend-configmap.yaml
+    - kubectl apply -f k8s/backend-deployment.yaml
+    - kubectl apply -f k8s/frontend-deployment.yaml
+    - kubectl apply -f k8s/backend-service.yaml
+    - kubectl apply -f k8s/frontend-service.yaml
+    - kubectl apply -f k8s/inventory-ingress.yaml
     - echo "Creating migration job for commit $CI_COMMIT_SHORT_SHA"
     - export MIGRATION_JOB="backend-migration-$CI_COMMIT_SHORT_SHA"
     - |
