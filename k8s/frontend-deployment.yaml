@@ -9,6 +9,7 @@ metadata:
     app.kubernetes.io/part-of: cloud-native-inventory-platform
 spec:
   replicas: 2
+  revisionHistoryLimit: 5
   strategy:
     type: RollingUpdate
     rollingUpdate:

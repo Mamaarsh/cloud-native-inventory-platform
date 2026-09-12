@@ -9,6 +9,7 @@ metadata:
     app.kubernetes.io/part-of: cloud-native-inventory-platform
 spec:
   backoffLimit: 3
+  ttlSecondsAfterFinished: 300
   template:
     metadata:
       labels:
