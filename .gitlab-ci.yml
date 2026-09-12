@@ -131,8 +131,6 @@ deploy-kubernetes:
     - echo "Selecting Kubernetes Agent context"
     - kubectl config use-context "$CI_PROJECT_PATH:inventory-lab"
     - echo "Applying Kubernetes manifests"
-    - kubectl apply -f k8s/namespace.yaml
-    - kubectl apply -f k8s/backend-configmap.yaml
     - kubectl apply -f k8s/backend-deployment.yaml
     - kubectl apply -f k8s/frontend-deployment.yaml
     - kubectl apply -f k8s/backend-service.yaml
