@@ -156,10 +156,16 @@ deploy-kubernetes:
     - echo "Migration completed successfully"
     - echo "Deploying backend image $CI_COMMIT_SHORT_SHA"
     - kubectl -n "$K8S_NAMESPACE" set image deployment/backend backend="${K8S_REGISTRY}/inventory/backend:${CI_COMMIT_SHORT_SHA}"
+    - kubectl -n "$K8S_NAMESPACE" annotate deployment/backend \
+      kubernetes.io/change-cause="deploy backend ${CI_COMMIT_SHORT_SHA}" \
+      --overwrite
     - echo "Waiting for backend rollout"
     - kubectl -n "$K8S_NAMESPACE" rollout status deployment/backend --timeout=180s
     - echo "Deploying frontend image $CI_COMMIT_SHORT_SHA"
     - kubectl -n "$K8S_NAMESPACE" set image deployment/frontend frontend="${K8S_REGISTRY}/inventory/frontend:${CI_COMMIT_SHORT_SHA}"
+    - kubectl -n "$K8S_NAMESPACE" annotate deployment/frontend \
+      kubernetes.io/change-cause="deploy frontend ${CI_COMMIT_SHORT_SHA}" \
+      --overwrite
     - echo "Waiting for frontend rollout"
     - kubectl -n "$K8S_NAMESPACE" rollout status deployment/frontend --timeout=180s
     - echo "Kubernetes deployment completed successfully"
