@@ -92,6 +92,26 @@ frontend-build:
     - docker push $NEXUS_REGISTRY/inventory/frontend:$CI_COMMIT_SHORT_SHA
     - docker push $NEXUS_REGISTRY/inventory/frontend:latest
 
+kubernetes-agent-test:
+  stage: test
+  tags:
+    - inventory-runner
+  image:
+    name: 192.168.122.1:8083/alpine/kubectl:1.35.4
+    pull_policy: if-not-present
+    entrypoint: [""]
+  script:
+    - echo "Checking GitLab Kubernetes Agent connection"
+    - test -n "$KUBECONFIG"
+    - kubectl config get-contexts
+    - kubectl config use-context "$CI_PROJECT_PATH:inventory-lab"
+    - kubectl get pods -n inventory
+    - test "$(kubectl auth can-i patch deployments -n inventory)" = "yes"
+    - |
+      SECRET_ACCESS="$(kubectl auth can-i get secrets -n inventory || true)"
+      echo "Can read secrets: $SECRET_ACCESS"
+      test "$SECRET_ACCESS" = "no"
+
 cleanup:
   stage: cleanup
   tags:
