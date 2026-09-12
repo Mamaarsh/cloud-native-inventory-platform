@@ -24,14 +24,26 @@ spec:
         app.kubernetes.io/component: api
         app.kubernetes.io/part-of: cloud-native-inventory-platform
     spec:
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       imagePullSecrets:
         - name: nexus-registry-secret
       containers:
         - name: backend
           image: nexus.local:8084/inventory/backend:latest
           imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 999
+            runAsGroup: 999
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           ports:
-            - name:  http
+            - name: http
               containerPort: 8000
           envFrom:
             - configMapRef:
