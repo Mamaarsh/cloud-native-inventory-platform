@@ -25,6 +25,8 @@ spec:
         app.kubernetes.io/component: web
         app.kubernetes.io/part-of: cloud-native-inventory-platform
     spec:
+      serviceAccountName: frontend-sa
+      automountServiceAccountToken: false
       securityContext:
         seccompProfile:
           type: RuntimeDefault

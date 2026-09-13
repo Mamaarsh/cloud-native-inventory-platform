@@ -17,6 +17,8 @@ spec:
         app.kubernetes.io/component: migration
         app.kubernetes.io/part-of: cloud-native-inventory-platform
     spec:
+      serviceAccountName: migration-sa
+      automountServiceAccountToken: false
       restartPolicy: Never
       imagePullSecrets:
         - name:  nexus-registry-secret

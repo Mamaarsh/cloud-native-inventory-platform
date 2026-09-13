@@ -25,6 +25,8 @@ spec:
         app.kubernetes.io/part-of: cloud-native-inventory-platform
     spec:
       terminationGracePeriodSeconds: 30
+      serviceAccountName: backend-sa
+      automountServiceAccountToken: false
       securityContext:
         seccompProfile:
           type: RuntimeDefault
