@@ -18,7 +18,7 @@ spec:
   podSelector:
     matchLabels:
       app.kubernetes.io/name: frontend
-  policyType:
+  policyTypes:
     - Ingress
   ingress:
     - from:
@@ -68,7 +68,7 @@ spec:
             matchLabels:
               app.kubernetes.io/name: backend
       ports:
-        - portocol: TCP
+        - protocol: TCP
           port: 5432
 
 ---
