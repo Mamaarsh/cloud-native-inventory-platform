@@ -12,12 +12,24 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
+  name: default-deny-egress
+  namespace: inventory
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
   name: allow-frontend-from-ingress
   namespace: inventory
 spec:
   podSelector:
     matchLabels:
       app.kubernetes.io/name: frontend
+      app.kubernetes.io/component: web
   policyTypes:
     - Ingress
   ingress:
@@ -26,32 +38,48 @@ spec:
             matchLabels:
               kubernetes.io/metadata.name: nginx-ingress
       ports:
-      - protocol: TCP
-        port: 8080
+        - protocol: TCP
+          port: 8080
 
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: allow-backend-from-frontend
+  name: allow-backend-from-ingress
   namespace: inventory
 spec:
   podSelector:
     matchLabels:
       app.kubernetes.io/name: backend
+      app.kubernetes.io/component: api
   policyTypes:
     - Ingress
   ingress:
     - from:
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: inventory
-          podSelector:
-            matchLabels:
-              app.kubernetes.io/name: frontend
+              kubernetes.io/metadata.name: nginx-ingress
       ports:
         - protocol: TCP
           port: 8000
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  # Compatibility tombstone: kubectl apply does not delete the previous
+  # allow-backend-from-frontend object when its replacement has a new name.
+  # This policy intentionally grants no ingress traffic.
+  name: allow-backend-from-frontend
+  namespace: inventory
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: backend
+      app.kubernetes.io/component: api
+  policyTypes:
+    - Ingress
+  ingress: []
 
 ---
 apiVersion: networking.k8s.io/v1
@@ -73,33 +101,15 @@ spec:
           podSelector:
             matchLabels:
               app.kubernetes.io/name: backend
+            matchExpressions:
+              - key: app.kubernetes.io/component
+                operator: In
+                values:
+                  - api
+                  - migration
       ports:
         - protocol: TCP
           port: 5432
-
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: allow-dns
-  namespace: inventory
-spec:
-  podSelector: {}
-  policyTypes:
-    - Egress
-  egress:
-    - to:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: kube-system
-          podSelector:
-            matchLabels:
-              k8s-app: kube-dns
-      ports:
-        - protocol: UDP
-          port: 53
-        - protocol: TCP
-          port: 53
 
 ---
 apiVersion: networking.k8s.io/v1
@@ -110,6 +120,7 @@ metadata:
 spec:
   podSelector:
     matchLabels:
+      app.kubernetes.io/name: backend
       app.kubernetes.io/component: migration
   policyTypes:
     - Egress
@@ -124,18 +135,6 @@ spec:
       ports:
         - protocol: TCP
           port: 5432
-    - to:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: kube-system
-          podSelector:
-            matchLabels:
-              k8s-app: kube-dns
-      ports:
-        - protocol: UDP
-          port: 53
-        - protocol: TCP
-          port: 53
 
 ---
 apiVersion: networking.k8s.io/v1
@@ -147,6 +146,7 @@ spec:
   podSelector:
     matchLabels:
       app.kubernetes.io/name: backend
+      app.kubernetes.io/component: api
   policyTypes:
     - Egress
   egress:
@@ -160,6 +160,30 @@ spec:
       ports:
         - protocol: TCP
           port: 5432
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: inventory
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values:
+          - backend
+          - frontend
+      - key: app.kubernetes.io/component
+        operator: In
+        values:
+          - api
+          - migration
+          - web
+  policyTypes:
+    - Egress
+  egress:
     - to:
         - namespaceSelector:
             matchLabels:
@@ -169,4 +193,6 @@ spec:
               k8s-app: kube-dns
       ports:
         - protocol: UDP
+          port: 53
+        - protocol: TCP
           port: 53
