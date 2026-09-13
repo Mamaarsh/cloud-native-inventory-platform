@@ -30,6 +30,8 @@ spec:
       securityContext:
         seccompProfile:
           type: RuntimeDefault
+        fsGroup: 999
+        fsGroupChangePolicy: OnRootMismatch
       imagePullSecrets:
         - name: nexus-registry-secret
       containers:
@@ -41,12 +43,20 @@ spec:
             runAsUser: 999
             runAsGroup: 999
             allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
             capabilities:
               drop:
                 - ALL
           ports:
             - name: http
               containerPort: 8000
+          volumeMounts:
+            - name: staticfiles
+              mountPath: /app/staticfiles
+            - name: media
+              mountPath: /app/media
+            - name: tmp
+              mountPath: /tmp
           envFrom:
             - configMapRef:
                 name: backend-config
@@ -83,3 +93,10 @@ spec:
             periodSeconds: 20
             timeoutSeconds: 5
             failureThreshold: 3
+      volumes:
+        - name: staticfiles
+          emptyDir: {}
+        - name: media
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
