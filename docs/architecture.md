@@ -2,26 +2,29 @@
 
 ## Overview
 
-Cloud Native Inventory Platform is a full-stack operations workload for a DevOps lifecycle portfolio. The application phase is complete: the current implementation runs React and Django behind Nginx, stores operational data in PostgreSQL, and configures Redis for Celery. CI/CD, Kubernetes, Helm, observability, centralized logging, and production deployment hardening belong to the next phase.
+Cloud Native Inventory Platform is a full-stack operations workload for a DevOps lifecycle portfolio. The repository implements a React/Django/PostgreSQL application, container builds, Nexus-backed image flows, GitHub-to-Hamgit automation, GitLab CI/CD, and a Kubernetes application deployment using production-style security controls. It remains a lab implementation: observability, centralized logging, production TLS, durable Kubernetes media storage, external secrets management, and automated recovery are not present.
 
 ## High-Level Architecture
 
 ```mermaid
 flowchart LR
-    Browser[Browser] --> Nginx[Nginx / frontend container]
-    Nginx -->|React SPA routes| SPA[React application]
-    Nginx -->|/api/| Gunicorn[Gunicorn]
-    Gunicorn --> Django[Django REST Framework]
-    Django --> PostgreSQL[(PostgreSQL 16)]
-    Django --> Redis[(Redis 7)]
-    Nginx -->|/static/| Static[(static_data)]
-    Nginx -->|/media/| Media[(media_data)]
-    Django --> Static
-    Django --> Media
-    Redis -. Celery configured .-> Worker[Celery worker - not deployed]
+    GitHub[GitHub main] --> GHA[GitHub Actions sync/trigger]
+    GHA --> Hamgit[Hamgit / GitLab]
+    Hamgit --> Pipeline[GitLab CI pipeline]
+    Proxy[Nexus Docker proxy :8083] --> Pipeline
+    Pipeline --> Hosted[Nexus hosted :8084]
+    Pipeline --> Agent[GitLab Agent]
+    Hosted --> Cluster[Kubernetes inventory namespace]
+    Agent --> Cluster
+
+    Browser[Browser] --> Ingress[NGINX Ingress]
+    Ingress -->|/| Frontend[frontend Service :80<br/>pods :8080]
+    Ingress -->|/api| Backend[backend Service/pods :8000]
+    Backend -->|TCP 5432| PostgreSQL[(PostgreSQL 16)]
+    PostgreSQL --> Longhorn[(Longhorn 1 GiB RWO PVC)]
 ```
 
-Nginx is the only host-published service in the current Compose topology. It serves the built SPA, proxies API requests to Gunicorn, and serves shared static/media volumes directly.
+The Ingress resource for `inventory.local` sends `/api` directly to the backend Service and `/` to the frontend Service. The frontend container still contains an NGINX `/api/` proxy for non-Ingress use, but frontend-to-backend traffic is not permitted by the Kubernetes NetworkPolicies and is not part of the deployed browser path.
 
 ## Current Implemented Architecture
 
@@ -135,7 +138,7 @@ The transition service validates and locks each update. Status cannot be changed
 
 The current local/mock provider persists one Payment per Order. Payment execution is Admin-only and idempotently returns an existing successful payment; a successful pending-order payment uses the status service to move the order to processing.
 
-Notifications are persisted for selected payment/status events. Delivery code, retries, Celery task configuration, and Redis broker/result settings exist. The current Compose topology does **not** run a Celery worker, so asynchronous notification delivery is not an implemented runtime service yet.
+Notifications are persisted for selected payment/status events. Delivery code, retries, Celery task configuration, and Redis broker/result settings exist. Compose defines Redis but no Celery worker. Kubernetes defines neither Redis nor a Celery worker and its egress policies do not authorize a Redis destination. Asynchronous notification delivery is therefore not an implemented deployment capability.
 
 ### Audit
 
@@ -154,21 +157,103 @@ The implemented Compose stack contains:
 
 The backend depends on healthy PostgreSQL and Redis; the frontend depends on the healthy backend. The backend healthcheck uses process-only liveness.
 
-### Nexus base-image flow
+The Compose file is retained as a local topology, but it currently has two configuration mismatches that must be resolved before relying on it as an end-to-end UI path:
 
-The control-plane lab consumes external base images through the Nexus `docker-all` pull group at `192.168.122.1:8082`. Compose supplies `NEXUS_DOCKER_GROUP=192.168.122.1:8082/base`, producing paths such as:
+- `.env.example` uses the legacy `192.168.122.1:8082/base` Nexus group, while current Dockerfile defaults and CI use the proxy repository on port `8083`.
+- Compose supplies `nginx:alpine` and maps host `80` to container `80`, while the current frontend configuration listens on container port `8080` and the Dockerfile defaults to `nginxinc/nginx-unprivileged:alpine`.
+
+The backend image entrypoint runs only `collectstatic`; Kubernetes migrations are deliberately handled by a separate Job. Compose users must run `python manage.py migrate` explicitly.
+
+## Kubernetes Application Runtime
+
+The raw manifests deploy into the `inventory` namespace:
+
+| Resource | Current implementation |
+|---|---|
+| Backend | Two-replica Deployment; Service/pod TCP 8000 |
+| Frontend | Two-replica Deployment; Service TCP 80 to pod TCP 8080 |
+| PostgreSQL | One-replica StatefulSet; headless Service TCP 5432 |
+| Migration | Commit-specific Job created by CI; `migrate --noinput` then `create_roles` |
+| Ingress | `inventory.local`; `/api` to backend and `/` to frontend |
+
+The repository does not provision the Kubernetes cluster itself. Kubeadm topology, Calico installation/configuration, NGINX Ingress Controller exposure, and Longhorn installation are external lab infrastructure and cannot be verified from these files; the manifests consume those capabilities.
+
+PostgreSQL uses a Longhorn `ReadWriteOnce` claim with 1 GiB requested capacity. Backend `/app/staticfiles`, `/app/media`, and `/tmp` are separate `emptyDir` volumes in each pod. Frontend `/tmp` is also `emptyDir`. Consequently, PostgreSQL data has persistent storage, but uploaded media is ephemeral, not shared between backend replicas, and not mounted into the frontend pod that owns the `/media/` NGINX alias.
+
+### Workload and container security
+
+- `backend-sa`, `frontend-sa`, and `migration-sa` are dedicated workload identities. Their pods set `automountServiceAccountToken: false`, and no RoleBinding grants them Kubernetes API permissions.
+- Backend runs as UID/GID 999 with `readOnlyRootFilesystem: true`; only `/app/staticfiles`, `/app/media`, and `/tmp` are writable volumes.
+- Frontend runs as UID/GID 101 with `readOnlyRootFilesystem: true`; `/tmp` is its explicit writable volume.
+- Migration runs as UID/GID 999. PostgreSQL also runs as UID/GID 999. Both disable privilege escalation and drop all capabilities, but neither manifest declares a read-only root filesystem.
+- All four workload templates use `RuntimeDefault` seccomp. The `inventory` namespace enforces, warns, and audits the Restricted Pod Security Admission profile at version `v1.35`; this is namespace-scoped, not cluster-wide.
+- Application configuration references `database-secret`, `backend-secret`, and `nexus-registry-secret` rather than embedding their values in workload manifests. No secret-management controller or encrypted-secret format is committed.
+
+PostgreSQL does not currently select one of the dedicated application ServiceAccounts or disable automatic token mounting explicitly.
+
+### Network isolation
+
+The namespace has explicit default-deny ingress and egress. Allow policies authorize only:
 
 ```text
-192.168.122.1:8082/base/python:3.14-slim
-192.168.122.1:8082/base/node:22-alpine
-192.168.122.1:8082/base/nginx:alpine
-192.168.122.1:8082/base/postgres:16-alpine
-192.168.122.1:8082/base/redis:7-alpine
+nginx-ingress namespace -> frontend web pods  TCP 8080
+nginx-ingress namespace -> backend API pods  TCP 8000
+backend API pods         -> PostgreSQL pods   TCP 5432
+migration pods           -> PostgreSQL pods   TCP 5432
+frontend/API/migration   -> CoreDNS            UDP/TCP 53
 ```
 
-This address is lab-specific, not a production default. Dockerfiles accept `PYTHON_BASE_IMAGE`, `NODE_BASE_IMAGE`, and `NGINX_BASE_IMAGE` build arguments rather than embedding it. Nexus `docker-hosted` is the intended push repository; automated application-image build/push is future CI/CD work.
+The legacy-named `allow-backend-from-frontend` object is an empty-ingress compatibility tombstone and grants no traffic. NetworkPolicy is connection-aware, so response packets for an allowed connection do not require reverse-direction allow policies.
 
-### Persistence and file delivery
+### Deployment identity and bootstrap boundary
+
+The GitLab Agent uses `gitlab-deployer` in `gitlab-agent-inventory-lab`; its chart values disable automatic RBAC and ServiceAccount creation. A RoleBinding grants that identity only the following namespace-scoped access in `inventory`:
+
+| Resources | Verbs |
+|---|---|
+| Deployments | `get`, `list`, `watch`, `create`, `update`, `patch` |
+| ReplicaSets | `get`, `list`, `watch` |
+| Jobs | `get`, `list`, `watch`, `create`, `delete` |
+| Pods | `get`, `list`, `watch` |
+| Pod logs | `get` |
+| Services, Ingresses, NetworkPolicies | `get`, `list`, `watch`, `create`, `update`, `patch` |
+| ServiceAccounts | `get`, `create`, `update`, `patch` |
+
+Secrets are not included. Separate lease/event permissions for agent leader election are scoped to `gitlab-agent-inventory-lab`; this is not cluster-admin or unrestricted cluster access.
+
+The application pipeline applies workload ServiceAccounts, backend/frontend Deployments and Services, Ingress, and NetworkPolicies. It intentionally does not apply the namespace, PostgreSQL, backend ConfigMap, Secrets, GitLab Agent installation, or deployer RBAC. Those are bootstrap/infrastructure responsibilities and must exist before a deployment.
+
+### CI/CD flow
+
+Pushes to GitHub `main` run `.github/workflows/gitlab-trigger.yml`, which synchronizes `main` to Hamgit and calls the GitLab trigger API. `.gitlab-ci.yml` accepts trigger-sourced pipelines and implements:
+
+1. Django checks/tests against a PostgreSQL 16 CI service, frontend lint/build, and a GitLab Agent/RBAC check that explicitly requires Secrets read access to be denied.
+2. Backend and frontend image builds, then publication of commit-SHA and `latest` tags to the Nexus hosted registry.
+3. Selection of the GitLab Agent context and application-manifest reconciliation.
+4. Creation of `backend-migration-$CI_COMMIT_SHORT_SHA` with the commit-specific backend image, followed by a 180-second completion wait and failure-log collection.
+5. Backend and frontend Deployment updates to the exact commit-specific images, change-cause annotations, and rollout waits.
+
+The cleanup stage is manual and prunes runner Docker data; it is not application or Nexus retention automation.
+
+## Nexus Image Flow
+
+Current Dockerfile defaults and GitLab jobs pull base/tool images through the Nexus Docker proxy on `192.168.122.1:8083`, including:
+
+```text
+192.168.122.1:8083/python:3.14-slim
+192.168.122.1:8083/node:22-alpine
+192.168.122.1:8083/nginxinc/nginx-unprivileged:alpine
+192.168.122.1:8083/postgres:16
+192.168.122.1:8083/alpine/kubectl:1.35.4
+```
+
+The backend and frontend Dockerfiles accept base-image build arguments and default to this proxy. The hosted registry on port `8084` stores project-built images. CI pushes both `$CI_COMMIT_SHORT_SHA` and `latest`, while the migration Job and final Deployment updates use the exact commit tag through `nexus.local:8084/inventory/...`. `latest` remains only the manifest/bootstrap placeholder and convenience tag.
+
+The manual `cleanup` CI job prunes old Docker data from the runner after 168 hours. It does not define or prove a Nexus retention policy.
+
+## Persistence and File Delivery
+
+Compose declares named volumes:
 
 ```text
 PostgreSQL -> /var/lib/postgresql/data -> postgres_data
@@ -176,9 +261,19 @@ Django collectstatic -> /app/staticfiles -> static_data -> Nginx /var/www/static
 Django uploads      -> /app/media       -> media_data  -> Nginx /var/www/media:ro  -> /media/
 ```
 
-Static and media delivery has been runtime-verified with `DEBUG=False`; media is not proxied to Gunicorn. Named volumes are durable for a single-host Compose deployment, not a multi-node storage design.
+These are single-host Docker volumes. The current Compose port/image mismatch described above prevents the repository configuration from being treated as a verified end-to-end frontend runtime without correction.
 
-Nginx scopes `client_max_body_size 6m` to `/api/`. The extra headroom allows a valid 5 MiB multipart product image to reach Django. Django validates the actual image format and 5 MiB file maximum and returns `400` for oversized files.
+Kubernetes persistence is different:
+
+```text
+PostgreSQL -> Longhorn PVC (1 GiB, ReadWriteOnce)
+backend static/media/tmp -> per-pod emptyDir
+frontend tmp -> per-pod emptyDir
+```
+
+Kubernetes media uploads are therefore ephemeral and not shared. The repository has no object store, shared media PVC, or external media service.
+
+The frontend-container NGINX scopes `client_max_body_size 6m` to its `/api/` proxy. Kubernetes `/api` traffic bypasses that container, and the Ingress manifest has no body-size annotation, so the controller's external configuration also governs Kubernetes uploads. Django validates the actual image format and 5 MiB file maximum and returns `400` for oversized files.
 
 ## Health Architecture
 
@@ -188,29 +283,26 @@ Nginx scopes `client_max_body_size 6m` to `/api/`. The extra headroom allows a v
 
 ## Application Freeze Baseline
 
-- Django system check: pass
-- Migrations applied through `inventory.0008_auditlog`
-- `makemigrations --check --dry-run`: no changes
-- Full backend suite: 246 tests passing on the control-plane PostgreSQL environment
-- OpenAPI validation: no errors or warnings
-- Nginx configuration validation: pass
-- Manual E2E: complete
+- Migration files extend through `inventory.0008_auditlog`
+- The backend source currently contains 246 test methods; GitLab CI runs `manage.py check` and the full Django suite against PostgreSQL 16
+- GitLab CI runs frontend lint and production-build validation
+- The generated OpenAPI schema can be validated with `manage.py spectacular --file schema.yml --validate`
 
-The application phase is complete and ready for freeze. The frontend currently has no automated test suite; it is validated through linting, TypeScript/production build checks, and manual E2E.
+The frontend currently has no automated test suite. This documentation audit did not independently reproduce historical manual E2E claims.
 
 ## Future DevOps Architecture
 
-The next phase will add, rather than claim as current:
+CI/CD, Nexus publication, and raw-manifest Kubernetes deployment are implemented. The next planned work is:
 
 ```mermaid
 flowchart LR
-    Git[Git repository] --> CI[CI/CD]
-    CI --> Registry[Nexus application images]
-    Registry --> K8s[Kubernetes]
-    K8s --> Helm[Helm-managed releases]
-    K8s --> Obs[Prometheus / Grafana / centralized logs]
-    K8s --> Ops[TLS / backup / recovery / resilience]
-    K8s --> Workers[Celery workers]
+    Scan[Image and dependency scanning] --> Secrets[Secrets-management improvements]
+    Secrets --> Metrics[Prometheus and application/infrastructure metrics]
+    Metrics --> Dashboards[Grafana and PromQL dashboards]
+    Dashboards --> Alerts[Alerting]
+    Alerts --> Logs[Centralized logging]
+    Logs --> Recovery[Backup and disaster recovery]
+    Recovery --> Testing[Load and failure testing]
 ```
 
-Production TLS, secret management, image promotion, deployment automation, multi-node persistence, monitoring, centralized logging, backups, and recovery procedures are not implemented by the current Compose application runtime.
+Trivy or another vulnerability scanner, SOPS/Sealed Secrets/External Secrets/Vault, Prometheus, Grafana, Alertmanager, Loki, production TLS/cert-manager, highly available PostgreSQL, external object storage, and automated disaster recovery are not implemented in this repository. The application has no Helm chart and deploys through raw manifests; `gitlab-agent-values.yaml` is only configuration for the separately installed agent.

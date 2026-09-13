@@ -68,18 +68,24 @@ Backend permission checks remain authoritative; frontend guards only control nav
 - `VITE_API_URL` is the browser-visible API root and normally remains `/api`.
 - `VITE_API_PROXY_TARGET` is a development-only Vite proxy target; it is not embedded in production builds.
 
-Relative `/api` and `/media` paths keep the UI compatible with same-origin Docker/Nginx deployment. Product image rendering accepts backend media URLs and safely falls back when an image is absent or broken.
+Relative `/api` and `/media` paths keep browser requests same-origin. Product image rendering accepts backend media URLs and safely falls back when an image is absent or broken.
 
 ## Production runtime
 
-The multi-stage Dockerfile builds the Vite bundle with configurable `NODE_BASE_IMAGE` and serves it with configurable `NGINX_BASE_IMAGE`. Nginx:
+The multi-stage Dockerfile builds the Vite bundle with configurable `NODE_BASE_IMAGE` and serves it with configurable `NGINX_BASE_IMAGE`. Defaults use the Nexus proxy on port `8083` and `nginxinc/nginx-unprivileged:alpine`. NGINX listens on container port `8080` and:
 
 - serves the SPA with a fallback to `index.html`;
-- proxies `/api/` to the Gunicorn backend;
-- serves `/static/` and `/media/` directly from read-only Compose volumes; and
+- contains a `/api/` proxy to the Gunicorn backend for direct-container/Compose routing;
+- contains `/static/` and `/media/` aliases used with the Compose shared volumes; and
 - permits API request bodies up to `6m`, leaving Django to enforce the 5 MiB product-image file limit.
 
-The current lab resolves base images through Nexus; the registry address is supplied at build time rather than hardcoded in the Dockerfile.
+In Kubernetes, `inventory.local` Ingress routes browser `/api` requests directly to the backend Service and `/` to the frontend Service. The frontend pod is not an API hop, and NetworkPolicy does not permit frontend-to-backend TCP. The retained `/api/` proxy is therefore redundant for the deployed Ingress path.
+
+The Kubernetes Deployment runs as UID/GID 101 with `frontend-sa`, disables automatic ServiceAccount-token mounting, disables privilege escalation, drops all capabilities, uses `RuntimeDefault` seccomp, and makes the root filesystem read-only. Only `/tmp` is mounted writable through `emptyDir`.
+
+Kubernetes does not mount the backend media/static `emptyDir` volumes into the frontend pod. Uploaded media is currently ephemeral and not a reliable multi-replica Kubernetes delivery path.
+
+The repository-root Compose file still overrides the frontend base to `nginx:alpine` and maps host `80` to container `80`, which does not match this port-8080 unprivileged configuration. Reconcile those Compose values before using it as an end-to-end frontend runtime.
 
 ## Validation
 
@@ -88,10 +94,10 @@ npm run lint
 npm run build
 ```
 
-The production bundle is emitted to `dist/`. There is currently no frontend automated test suite; validation uses linting, TypeScript/production builds, and manual E2E testing.
+The production bundle is emitted to `dist/`. There is currently no frontend automated test suite; GitLab CI runs linting and the TypeScript/production build.
 
 ## Important notes
 
 - Access and refresh tokens are stored in `localStorage`; logout clears the current browser session but does not revoke already-issued JWTs server-side.
 - RBAC, validation, stock changes, status transitions, payments, and audit behavior are enforced by the backend.
-- The current Compose stack does not run a Celery worker, so deployed asynchronous notification delivery remains future operational work.
+- Compose does not run a Celery worker. Kubernetes deploys neither Redis nor a worker, so asynchronous notification delivery remains future operational work.

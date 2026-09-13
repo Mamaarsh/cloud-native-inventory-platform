@@ -4,6 +4,8 @@
 
 The backend exposes JSON APIs through Django REST Framework. Authentication endpoints use `/api/auth/`; inventory-domain endpoints are versioned under `/api/v1/`. Except for registration, JWT token endpoints, health checks, and OpenAPI pages, requests require a bearer access token.
 
+In Kubernetes, the `inventory.local` Ingress sends `/api` directly to the backend Service on port 8000. The browser does not reach the API through the frontend pod. The same relative paths are used by local frontend development through Vite's optional proxy.
+
 ```http
 Authorization: Bearer <access-token>
 Content-Type: application/json
@@ -129,7 +131,7 @@ The list accepts `status=pending|active` and `ordering=<field>`. Role assignment
 
 All authenticated users may read products; only Admin may mutate them. Fields include `id`, `name`, `sku`, `price`, `image`, `is_active`, and timestamps.
 
-Create/update supports JSON when no image file is sent and `multipart/form-data` for an upload. Images must be actual JPEG, PNG, or WebP files and no larger than 5 MiB. `remove_image=true` explicitly removes the current image. Nginx permits `/api/` request bodies up to `6m` to accommodate multipart overhead; Django remains authoritative for the 5 MiB file rule.
+Create/update supports JSON when no image file is sent and `multipart/form-data` for an upload. Images must be actual JPEG, PNG, or WebP files and no larger than 5 MiB. `remove_image=true` explicitly removes the current image. The frontend-container NGINX configuration permits `/api/` request bodies up to `6m` for its direct proxy path. Kubernetes `/api` traffic bypasses that container, and the Ingress manifest sets no body-size annotation, so the installed Ingress controller's configuration also determines the effective Kubernetes upload limit. Django remains authoritative for the 5 MiB file rule.
 
 Deleting a referenced product returns `409 Conflict`:
 
@@ -255,6 +257,8 @@ Health endpoints are public and unversioned.
 | `GET` | `/api/health/dependencies/` | PostgreSQL and Redis diagnostic status |
 
 Readiness intentionally excludes Redis. The dependencies response reports `healthy`, `degraded` when only Redis is unavailable, or `unhealthy` when PostgreSQL is unavailable.
+
+The Kubernetes manifests currently deploy no Redis Service and authorize no Redis egress, so the dependency endpoint is expected to report Redis unavailable there unless the deployment architecture and NetworkPolicies are extended. This does not make the readiness endpoint fail.
 
 ## OpenAPI documentation
 

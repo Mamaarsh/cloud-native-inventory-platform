@@ -70,17 +70,23 @@ python manage.py test
 python manage.py spectacular --file schema.yml --validate
 ```
 
-The application-freeze baseline has migrations through `inventory.0008_auditlog` and 246 passing backend tests.
+Migrations currently extend through `inventory.0008_auditlog`, and the source contains 246 test methods. GitLab CI runs `manage.py check` and the full suite against a PostgreSQL 16 service.
 
 ## Production runtime
 
-The Docker image uses configurable `PYTHON_BASE_IMAGE`. Its entrypoint runs migrations and `collectstatic`, then Gunicorn serves Django on port 8000. Compose mounts:
+The Docker image uses configurable `PYTHON_BASE_IMAGE`, defaulting to the lab Nexus proxy at `192.168.122.1:8083/python:3.14-slim`. Its entrypoint runs `collectstatic` only; it does not run database migrations. Gunicorn uses three synchronous workers and listens on `0.0.0.0:8000`.
+
+Compose mounts:
 
 - `/app/staticfiles` to `static_data` for Nginx `/static/` delivery;
 - `/app/media` to `media_data` for Nginx `/media/` delivery; and
 - PostgreSQL data to `postgres_data`.
 
-This static/media path is verified with `DEBUG=False`. The current lab supplies base images through the Nexus Docker group; the Dockerfile does not hardcode that address.
+Compose users must run migrations explicitly. The repository-root Compose configuration also retains a legacy Nexus prefix and a frontend port/base-image mismatch; see the repository [architecture guide](../../docs/architecture.md#docker-compose-runtime) before using it as an end-to-end runtime.
+
+In Kubernetes, migration execution is separated into `backend-migration-$CI_COMMIT_SHORT_SHA`. The Job runs `python manage.py migrate --noinput` and `python manage.py create_roles` before CI rolls out the application image.
+
+The backend Deployment uses `backend-sa`, disables automatic ServiceAccount-token mounting, and runs as UID/GID 999 with privilege escalation disabled, all capabilities dropped, `RuntimeDefault` seccomp, and a read-only root filesystem. Writable `emptyDir` mounts are limited to `/app/staticfiles`, `/app/media`, and `/tmp`. These volumes are per-pod and ephemeral; Kubernetes media is neither persistent nor shared across the two backend replicas.
 
 ## API operations
 
@@ -97,5 +103,5 @@ This static/media path is verified with `DEBUG=False`. The current lab supplies 
 - Inventory movement, order status, and audit histories are immutable through normal API/Admin paths, not against privileged database or queryset-level access.
 - Product and warehouse foreign-key protection preserves referenced operational history and returns a safe `409 Conflict` from the API.
 - The payment provider is a persisted mock/local implementation.
-- Notification models, services, and Celery tasks exist, but the current Compose file does not deploy a Celery worker.
+- Notification models, services, and Celery tasks exist. Compose defines Redis but no Celery worker; Kubernetes defines neither Redis nor a worker, and its NetworkPolicies do not authorize Redis egress.
 - Password changes do not revoke previously issued JWTs; additional blacklist/revocation work would be required.

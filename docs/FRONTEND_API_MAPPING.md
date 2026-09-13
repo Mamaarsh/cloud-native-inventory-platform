@@ -18,6 +18,8 @@ The client retries one eligible `401` after refreshing the access token. If refr
 
 List pages debounce search by approximately 300 ms, preserve previous query data during background refetches, and use DRF `count`, `next`, `previous`, and `results`.
 
+In Kubernetes, `inventory.local` Ingress routes `/api` directly to the backend Service and `/` to the frontend Service. Although the frontend image retains an NGINX `/api/` proxy, the Kubernetes NetworkPolicies do not authorize frontend-to-backend TCP; that proxy is not part of the deployed browser request path.
+
 ## Public authentication
 
 | Frontend | Client function | Backend path | Contract |
@@ -149,7 +151,7 @@ The current SPA does not poll health endpoints or claim live connectivity. Opera
 - `/api/health/dependencies/`
 - `/api/schema/`, `/api/docs/`, and `/api/redoc/`
 
-There is no public Notification API and no frontend notification inbox. The backend model/service/task exists, but the current Compose runtime has no Celery worker; the UI does not claim asynchronous delivery.
+There is no public Notification API and no frontend notification inbox. The backend model/service/task exists. Compose has Redis but no Celery worker; Kubernetes has neither Redis nor a worker. The UI does not claim asynchronous delivery.
 
 ## Permission-aware presentation
 
@@ -181,4 +183,4 @@ This matrix describes presentation and navigation. Every request is independentl
 - Product images reuse URLs already returned in products and nested order items; Inventory uses its existing Product lookup. No extra media API exists.
 - Histories and AuditLog are immutable through normal APIs/Admin, not necessarily against privileged database access.
 - Frontend validation improves UX but Django/DRF remains authoritative.
-- The frontend currently has no automated test suite; integration is validated by lint/build checks and manual E2E against the backend.
+- The frontend currently has no automated test suite; GitLab CI validates linting and the production build, while live integration requires a deployed backend.
