@@ -20,11 +20,22 @@ spec:
       serviceAccountName: migration-sa
       automountServiceAccountToken: false
       restartPolicy: Never
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       imagePullSecrets:
         - name:  nexus-registry-secret
       containers:
         - name: migrate
           image: nexus.local:8084/inventory/backend:latest
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 999
+            runAsGroup: 999
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           command: 
             - /bin/sh
             - -c
