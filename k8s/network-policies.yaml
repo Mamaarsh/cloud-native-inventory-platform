@@ -43,7 +43,10 @@ spec:
     - Ingress
   ingress:
     - from:
-        - podSelector:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: inventory
+          podSelector:
             matchLabels:
               app.kubernetes.io/name: frontend
       ports:
@@ -64,7 +67,10 @@ spec:
     - Ingress
   ingress:
     - from:
-        - podSelector:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: inventory
+          podSelector:
             matchLabels:
               app.kubernetes.io/name: backend
       ports:
@@ -107,7 +113,10 @@ spec:
     - Egress
   egress:
     - to:
-        - podSelector:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: inventory
+          podSelector:
             matchLabels:
               app.kubernetes.io/name: postgres
       ports:
@@ -122,4 +131,6 @@ spec:
               k8s-app: kube-dns
       ports:
         - protocol: UDP
+          port: 53
+        - protocol: TCP
           port: 53
