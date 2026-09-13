@@ -136,6 +136,7 @@ deploy-kubernetes:
     - kubectl apply -f k8s/backend-service.yaml
     - kubectl apply -f k8s/frontend-service.yaml
     - kubectl apply -f k8s/inventory-ingress.yaml
+    - kubectl apply -f k8s/network-policies.yaml
     - echo "Creating migration job for commit $CI_COMMIT_SHORT_SHA"
     - export MIGRATION_JOB="backend-migration-$CI_COMMIT_SHORT_SHA"
     - |
