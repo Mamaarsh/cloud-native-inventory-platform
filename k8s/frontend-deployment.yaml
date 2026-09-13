@@ -30,6 +30,8 @@ spec:
       securityContext:
         seccompProfile:
           type: RuntimeDefault
+        fsGroup: 101
+        fsGroupChangePolicy: OnRootMismatch
       imagePullSecrets:
         - name: nexus-registry-secret
       containers:
@@ -41,12 +43,16 @@ spec:
             runAsUser: 101
             runAsGroup: 101
             allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
             capabilities:
               drop:
                 - ALL
           ports:
           - name:  http
             containerPort: 8080
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
           resources:
             requests:
               cpu: "50m"
@@ -70,3 +76,6 @@ spec:
             periodSeconds: 20
             timeoutSeconds: 3
             failureThreshold: 3
+      volumes:
+        - name: tmp
+          emptyDir: {}
