@@ -23,6 +23,16 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+        --no-install-recommends \
+        --only-upgrade \
+        gzip \
+        libpcre2-8-0 \
+        libsqlite3-0 \
+        perl-base \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 RUN groupadd --system appgroup \
