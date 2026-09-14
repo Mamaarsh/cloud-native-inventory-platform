@@ -122,14 +122,20 @@ backend-trivy:
     name: 192.168.122.1:8083/aquasec/trivy:latest
     pull_policy: if-not-present
     entrypoint: [""]
+  cache:
+    key: trivy-db
+    paths:
+      - .trivycache/
   variables:
     TRIVY_IMAGE: "$NEXUS_REGISTRY/inventory/backend:$CI_COMMIT_SHORT_SHA"
   script:
     - echo "Scanning backend image"
     - trivy image
+        --cache-dir .trivycache
+        --db-repository ghcr.io/aquasecurity/trivy-db
         --severity HIGH,CRITICAL
-        --exit-code 1
         --ignore-unfixed
+        --exit-code 1
         $TRIVY_IMAGE
 
 frontend-trivy:
@@ -140,14 +146,20 @@ frontend-trivy:
     name: 192.168.122.1:8083/aquasec/trivy:latest
     pull_policy: if-not-present
     entrypoint: [""]
+  cache:
+    key: trivy-db
+    paths:
+      - .trivycache/
   variables:
     TRIVY_IMAGE: "$NEXUS_REGISTRY/inventory/frontend:$CI_COMMIT_SHORT_SHA"
   script:
     - echo "Scanning frontend image"
     - trivy image
-      --severity HIGH,CRITICAL
-        --exit-code 1
+        --cache-dir .trivycache
+        --db-repository ghcr.io/aquasecurity/trivy-db
+        --severity HIGH,CRITICAL
         --ignore-unfixed
+        --exit-code 1
         $TRIVY_IMAGE
 
 deploy-kubernetes:
