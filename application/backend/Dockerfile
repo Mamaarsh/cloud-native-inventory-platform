@@ -50,6 +50,7 @@ RUN python -m pip install \
         --no-index \
         --find-links=/wheels \
         -r requirements.txt \
+    && python -m pip uninstall -y pip \
     && rm -rf /wheels
 
 COPY --chown=appuser:appgroup . .
