@@ -170,6 +170,18 @@ deploy-kubernetes:
         --overwrite
     - echo "Waiting for backend rollout"
     - kubectl -n "$K8S_NAMESPACE" rollout status deployment/backend --timeout=180s
+    - echo "Deploying Celery worker image $CI_COMMIT_SHORT_SHA"
+    - |
+      sed \
+        -e "s#nexus.local:8084/inventory/backend:latest#${K8S_REGISTRY}/inventory/backend:${CI_COMMIT_SHORT_SHA}#" \
+        k8s/celery-deployment.yaml \
+      | kubectl apply -f -
+    - |
+      kubectl -n "$K8S_NAMESPACE" annotate deployment/celery-worker \
+        kubernetes.io/change-cause="deploy celery worker ${CI_COMMIT_SHORT_SHA}" \
+        --overwrite
+    - echo "Waiting for Celery worker rollout"
+    - kubectl -n "$K8S_NAMESPACE" rollout status deployment/celery-worker --timeout=180s
     - echo "Deploying frontend image $CI_COMMIT_SHORT_SHA"
     - kubectl -n "$K8S_NAMESPACE" set image deployment/frontend frontend="${K8S_REGISTRY}/inventory/frontend:${CI_COMMIT_SHORT_SHA}"
     - |

@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: celery-worker
+  namespace: inventory
+  labels:
+    app.kubernetes.io/name: celery
+    app.kubernetes.io/component: worker
+    app.kubernetes.io/part-of: cloud-native-inventory-platform
+spec:
+  replicas: 1
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: celery
+      app.kubernetes.io/component: worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: celery
+        app.kubernetes.io/component: worker
+        app.kubernetes.io/part-of: cloud-native-inventory-platform
+    spec:
+      serviceAccountName: celery-sa
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+        fsGroup: 999
+        fsGroupChangePolicy: OnRootMismatch
+      imagePullSecrets:
+        - name: nexus-registry-secret
+      containers:
+        - name: celery-worker
+          image: nexus.local:8084/inventory/backend:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - celery
+          args:
+            - -A
+            - config
+            - worker
+            - --loglevel=INFO
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 999
+            runAsGroup: 999
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          envFrom:
+            - configMapRef:
+                name: backend-config
+            - secretRef:
+                name: database-secret
+            - secretRef:
+                name: backend-secret
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name:  tmp
+          emptyDir: {}
