@@ -164,6 +164,8 @@ frontend-trivy:
 
 deploy-kubernetes:
   stage: deploy
+  resource_group: inventory-kubernetes
+  interruptible: false
   tags:
     - inventory-runner
   image:
@@ -177,69 +179,209 @@ deploy-kubernetes:
     name: production
     url: http://inventory.local:30632
   script:
-    - echo "Selecting Kubernetes Agent context"
-    - kubectl config use-context "$CI_PROJECT_PATH:inventory-lab"
-    - echo "Applying Kubernetes manifests"
-    - kubectl apply -f k8s/serviceaccounts.yaml
-    - kubectl apply -f k8s/backend-deployment.yaml
-    - kubectl apply -f k8s/frontend-deployment.yaml
-    - kubectl apply -f k8s/backend-service.yaml
-    - kubectl apply -f k8s/frontend-service.yaml
-    - kubectl apply -f k8s/inventory-ingress.yaml
-    - kubectl apply -f k8s/network-policies.yaml
-    - echo "Creating migration job for commit $CI_COMMIT_SHORT_SHA"
-    - export MIGRATION_JOB="backend-migration-$CI_COMMIT_SHORT_SHA"
     - |
-      sed \
-        -e "s/name: backend-migration/name: ${MIGRATION_JOB}/" \
-        -e "s#nexus.local:8084/inventory/backend:latest#${K8S_REGISTRY}/inventory/backend:${CI_COMMIT_SHORT_SHA}#" \
+      set -eu
+      if (set -o pipefail) 2>/dev/null; then
+        set -o pipefail
+      fi
+
+      echo "Checking whether commit ${CI_COMMIT_SHA} is still current on ${CI_DEFAULT_BRANCH}"
+      BRANCH_API_URL="${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/repository/branches?search=%5E${CI_DEFAULT_BRANCH}%24&per_page=1"
+      if BRANCH_RESPONSE="$(wget -qO- \
+        --header="JOB-TOKEN: ${CI_JOB_TOKEN}" \
+        "$BRANCH_API_URL" 2>/tmp/inventory-stale-check.err)"
+      then
+        LATEST_BRANCH_SHA="$(printf '%s\n' "$BRANCH_RESPONSE" | sed -n \
+          's/.*"commit":{"id":"\([0-9a-f]\{40\}\)".*/\1/p')"
+        if [ "${#LATEST_BRANCH_SHA}" -eq 40 ]; then
+          if [ "$LATEST_BRANCH_SHA" != "$CI_COMMIT_SHA" ]; then
+            echo "Skipping stale release ${CI_COMMIT_SHA}; ${CI_DEFAULT_BRANCH} is now ${LATEST_BRANCH_SHA}."
+            exit 0
+          fi
+          echo "Release commit is current."
+        else
+          echo "WARNING: Could not parse the current branch SHA; continuing rather than incorrectly skipping this release."
+        fi
+      else
+        echo "WARNING: Could not query the current branch SHA; continuing rather than incorrectly skipping this release."
+      fi
+
+      case "$CI_COMMIT_SHORT_SHA" in
+        ""|*[!0-9a-f]*)
+          echo "Invalid CI_COMMIT_SHORT_SHA: expected lowercase hexadecimal characters."
+          exit 1
+          ;;
+      esac
+      case "$CI_PIPELINE_IID" in
+        ""|*[!0-9]*)
+          echo "Invalid CI_PIPELINE_IID: expected decimal digits."
+          exit 1
+          ;;
+      esac
+      case "$CI_JOB_ID" in
+        ""|*[!0-9]*)
+          echo "Invalid CI_JOB_ID: expected decimal digits."
+          exit 1
+          ;;
+      esac
+
+      BACKEND_IMAGE="${K8S_REGISTRY}/inventory/backend:${CI_COMMIT_SHORT_SHA}"
+      FRONTEND_IMAGE="${K8S_REGISTRY}/inventory/frontend:${CI_COMMIT_SHORT_SHA}"
+      BACKEND_PLACEHOLDER="nexus.local:8084/inventory/backend:ci-render-required"
+      FRONTEND_PLACEHOLDER="nexus.local:8084/inventory/frontend:ci-render-required"
+      MIGRATION_JOB="migrate-${CI_COMMIT_SHORT_SHA}-${CI_PIPELINE_IID}-${CI_JOB_ID}"
+
+      if [ "${#MIGRATION_JOB}" -gt 63 ]; then
+        echo "Rendered migration Job name exceeds the Kubernetes 63-character limit."
+        exit 1
+      fi
+      case "$MIGRATION_JOB" in
+        ""|*[!a-z0-9-]*)
+          echo "Rendered migration Job name is not DNS-compatible."
+          exit 1
+          ;;
+      esac
+
+      RENDER_DIR="$(mktemp -d /tmp/inventory-release.XXXXXX)"
+      trap 'test -n "${RENDER_DIR:-}" && rm -rf -- "$RENDER_DIR"' EXIT
+
+      render_image_manifest() {
+        rim_source_file="$1"
+        rim_placeholder="$2"
+        rim_exact_image="$3"
+        rim_output_file="$4"
+        rim_placeholder_count="$(awk -v image="$rim_placeholder" \
+          '$1 == "image:" && $2 == image { count++ } END { print count + 0 }' \
+          "$rim_source_file")"
+        if [ "$rim_placeholder_count" -ne 1 ]; then
+          echo "Expected exactly one image placeholder in ${rim_source_file}; found ${rim_placeholder_count}."
+          exit 1
+        fi
+        awk -v placeholder="$rim_placeholder" -v exact_image="$rim_exact_image" '
+          $1 == "image:" && $2 == placeholder {
+            prefix = $0
+            sub(/image:.*/, "", prefix)
+            print prefix "image: " exact_image
+            next
+          }
+          { print }
+        ' "$rim_source_file" > "$rim_output_file"
+        rim_exact_count="$(awk -v image="$rim_exact_image" \
+          '$1 == "image:" && $2 == image { count++ } END { print count + 0 }' \
+          "$rim_output_file")"
+        if [ "$rim_exact_count" -ne 1 ] || grep -Fq "$rim_placeholder" "$rim_output_file"; then
+          echo "Exact image rendering failed for ${rim_source_file}."
+          exit 1
+        fi
+      }
+
+      render_migration_manifest() {
+        rmm_source_file="$1"
+        rmm_output_file="$2"
+        rmm_name_count="$(awk \
+          '$1 == "name:" && $2 == "backend-migration" { count++ } END { print count + 0 }' \
+          "$rmm_source_file")"
+        if [ "$rmm_name_count" -ne 1 ]; then
+          echo "Expected exactly one migration Job name placeholder; found ${rmm_name_count}."
+          exit 1
+        fi
+        awk -v job_name="$MIGRATION_JOB" '
+          $1 == "name:" && $2 == "backend-migration" {
+            prefix = $0
+            sub(/name:.*/, "", prefix)
+            print prefix "name: " job_name
+            next
+          }
+          { print }
+        ' "$rmm_source_file" > "$rmm_output_file"
+        render_image_manifest \
+          "$rmm_output_file" \
+          "$BACKEND_PLACEHOLDER" \
+          "$BACKEND_IMAGE" \
+          "${rmm_output_file}.rendered"
+        mv "${rmm_output_file}.rendered" "$rmm_output_file"
+        if ! grep -Fq "name: ${MIGRATION_JOB}" "$rmm_output_file"; then
+          echo "Migration Job name rendering failed."
+          exit 1
+        fi
+      }
+
+      echo "Selecting Kubernetes Agent context"
+      kubectl config use-context "$CI_PROJECT_PATH:inventory-lab"
+
+      echo "Reconciling non-workload application prerequisites"
+      kubectl apply -f k8s/serviceaccounts.yaml
+      kubectl apply -f k8s/backend-service.yaml
+      kubectl apply -f k8s/frontend-service.yaml
+      kubectl apply -f k8s/inventory-ingress.yaml
+      kubectl apply -f k8s/network-policies.yaml
+
+      echo "Rendering migration Job ${MIGRATION_JOB} with ${BACKEND_IMAGE}"
+      render_migration_manifest \
         k8s/backend-migration-job.yaml \
-      | kubectl create -f -
-    - echo "Waiting for database migrations"
-    - |
+        "$RENDER_DIR/backend-migration-job.yaml"
+      kubectl create -f "$RENDER_DIR/backend-migration-job.yaml"
+
+      echo "Waiting for database migrations"
       if ! kubectl wait \
         --for=condition=complete \
         "job/${MIGRATION_JOB}" \
         -n "$K8S_NAMESPACE" \
-        --timeout=180s
+        --timeout=660s
       then
         echo "Migration failed or timed out"
+        kubectl describe \
+          -n "$K8S_NAMESPACE" \
+          "job/${MIGRATION_JOB}" || true
         kubectl logs \
           -n "$K8S_NAMESPACE" \
           "job/${MIGRATION_JOB}" \
           --all-containers=true || true
         exit 1
       fi
-    - echo "Migration completed successfully"
-    - echo "Deploying backend image $CI_COMMIT_SHORT_SHA"
-    - kubectl -n "$K8S_NAMESPACE" set image deployment/backend backend="${K8S_REGISTRY}/inventory/backend:${CI_COMMIT_SHORT_SHA}"
-    - |
+
+      echo "Migration completed successfully"
+      echo "Rendering exact-SHA application workloads"
+      render_image_manifest \
+        k8s/backend-deployment.yaml \
+        "$BACKEND_PLACEHOLDER" \
+        "$BACKEND_IMAGE" \
+        "$RENDER_DIR/backend-deployment.yaml"
+      render_image_manifest \
+        k8s/celery-deployment.yaml \
+        "$BACKEND_PLACEHOLDER" \
+        "$BACKEND_IMAGE" \
+        "$RENDER_DIR/celery-deployment.yaml"
+      render_image_manifest \
+        k8s/frontend-deployment.yaml \
+        "$FRONTEND_PLACEHOLDER" \
+        "$FRONTEND_IMAGE" \
+        "$RENDER_DIR/frontend-deployment.yaml"
+
+      echo "Deploying backend image ${BACKEND_IMAGE}"
+      kubectl apply -f "$RENDER_DIR/backend-deployment.yaml"
       kubectl -n "$K8S_NAMESPACE" annotate deployment/backend \
         kubernetes.io/change-cause="deploy backend ${CI_COMMIT_SHORT_SHA}" \
         --overwrite
-    - echo "Waiting for backend rollout"
-    - kubectl -n "$K8S_NAMESPACE" rollout status deployment/backend --timeout=180s
-    - echo "Deploying Celery worker image $CI_COMMIT_SHORT_SHA"
-    - |
-      sed \
-        -e "s#nexus.local:8084/inventory/backend:latest#${K8S_REGISTRY}/inventory/backend:${CI_COMMIT_SHORT_SHA}#" \
-        k8s/celery-deployment.yaml \
-      | kubectl apply -f -
-    - |
+      echo "Waiting for backend rollout"
+      kubectl -n "$K8S_NAMESPACE" rollout status deployment/backend --timeout=180s
+
+      echo "Deploying Celery worker image ${BACKEND_IMAGE}"
+      kubectl apply -f "$RENDER_DIR/celery-deployment.yaml"
       kubectl -n "$K8S_NAMESPACE" annotate deployment/celery-worker \
         kubernetes.io/change-cause="deploy celery worker ${CI_COMMIT_SHORT_SHA}" \
         --overwrite
-    - echo "Waiting for Celery worker rollout"
-    - kubectl -n "$K8S_NAMESPACE" rollout status deployment/celery-worker --timeout=180s
-    - echo "Deploying frontend image $CI_COMMIT_SHORT_SHA"
-    - kubectl -n "$K8S_NAMESPACE" set image deployment/frontend frontend="${K8S_REGISTRY}/inventory/frontend:${CI_COMMIT_SHORT_SHA}"
-    - |
+      echo "Waiting for Celery worker rollout"
+      kubectl -n "$K8S_NAMESPACE" rollout status deployment/celery-worker --timeout=180s
+
+      echo "Deploying frontend image ${FRONTEND_IMAGE}"
+      kubectl apply -f "$RENDER_DIR/frontend-deployment.yaml"
       kubectl -n "$K8S_NAMESPACE" annotate deployment/frontend \
         kubernetes.io/change-cause="deploy frontend ${CI_COMMIT_SHORT_SHA}" \
         --overwrite
-    - echo "Waiting for frontend rollout"
-    - kubectl -n "$K8S_NAMESPACE" rollout status deployment/frontend --timeout=180s
-    - echo "Kubernetes deployment completed successfully"
+      echo "Waiting for frontend rollout"
+      kubectl -n "$K8S_NAMESPACE" rollout status deployment/frontend --timeout=180s
+      echo "Kubernetes deployment completed successfully"
 
 cleanup:
   stage: cleanup

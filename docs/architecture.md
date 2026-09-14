@@ -138,7 +138,7 @@ The transition service validates and locks each update. Status cannot be changed
 
 The current local/mock provider persists one Payment per Order. Payment execution is Admin-only and idempotently returns an existing successful payment; a successful pending-order payment uses the status service to move the order to processing.
 
-Notifications are persisted for selected payment/status events. Delivery code, retries, Celery task configuration, and Redis broker/result settings exist. Compose defines Redis but no Celery worker. Kubernetes defines neither Redis nor a Celery worker and its egress policies do not authorize a Redis destination. Asynchronous notification delivery is therefore not an implemented deployment capability.
+Notifications are persisted for selected payment/status events. Delivery code, retries, Celery task configuration, and Redis broker/result settings exist. Compose defines Redis but no Celery worker. Kubernetes defines a persistent Redis StatefulSet and a Celery worker that uses the exact backend release image; NetworkPolicies allow the API and worker to reach Redis and allow the worker to reach PostgreSQL.
 
 ### Audit
 
@@ -172,8 +172,10 @@ The raw manifests deploy into the `inventory` namespace:
 |---|---|
 | Backend | Two-replica Deployment; Service/pod TCP 8000 |
 | Frontend | Two-replica Deployment; Service TCP 80 to pod TCP 8080 |
-| PostgreSQL | One-replica StatefulSet; headless Service TCP 5432 |
-| Migration | Commit-specific Job created by CI; `migrate --noinput` then `create_roles` |
+| Celery | One-replica Deployment using the exact backend release image |
+| PostgreSQL | One-replica StatefulSet; headless Service TCP 5432; Longhorn volume ownership assigned to GID 999 |
+| Redis | One-replica StatefulSet; ClusterIP Service TCP 6379; Longhorn-backed AOF persistence |
+| Migration | Pipeline-attempt-specific Job created by CI; `migrate --noinput` then `create_roles` |
 | Ingress | `inventory.local`; `/api` to backend and `/` to frontend |
 
 The repository does not provision the Kubernetes cluster itself. Kubeadm topology, Calico installation/configuration, NGINX Ingress Controller exposure, and Longhorn installation are external lab infrastructure and cannot be verified from these files; the manifests consume those capabilities.
@@ -182,14 +184,12 @@ PostgreSQL uses a Longhorn `ReadWriteOnce` claim with 1 GiB requested capacity. 
 
 ### Workload and container security
 
-- `backend-sa`, `frontend-sa`, and `migration-sa` are dedicated workload identities. Their pods set `automountServiceAccountToken: false`, and no RoleBinding grants them Kubernetes API permissions.
+- `backend-sa`, `frontend-sa`, `celery-sa`, `migration-sa`, and `postgres-sa` are dedicated workload identities. Their pods set `automountServiceAccountToken: false`, and no RoleBinding grants them Kubernetes API permissions.
 - Backend runs as UID/GID 999 with `readOnlyRootFilesystem: true`; only `/app/staticfiles`, `/app/media`, and `/tmp` are writable volumes.
 - Frontend runs as UID/GID 101 with `readOnlyRootFilesystem: true`; `/tmp` is its explicit writable volume.
-- Migration runs as UID/GID 999. PostgreSQL also runs as UID/GID 999. Both disable privilege escalation and drop all capabilities, but neither manifest declares a read-only root filesystem.
-- All four workload templates use `RuntimeDefault` seccomp. The `inventory` namespace enforces, warns, and audits the Restricted Pod Security Admission profile at version `v1.35`; this is namespace-scoped, not cluster-wide.
+- Migration and PostgreSQL run as UID/GID 999. PostgreSQL additionally sets pod `fsGroup: 999` with `OnRootMismatch` handling so a freshly provisioned Longhorn volume is writable without running the container as root. Both disable privilege escalation and drop all capabilities, but neither declares a read-only root filesystem.
+- All workload templates use `RuntimeDefault` seccomp. The `inventory` namespace enforces, warns, and audits the Restricted Pod Security Admission profile at version `v1.35`; this is namespace-scoped, not cluster-wide.
 - Application configuration references `database-secret`, `backend-secret`, and `nexus-registry-secret` rather than embedding their values in workload manifests. No secret-management controller or encrypted-secret format is committed.
-
-PostgreSQL does not currently select one of the dedicated application ServiceAccounts or disable automatic token mounting explicitly.
 
 ### Network isolation
 
@@ -200,7 +200,10 @@ nginx-ingress namespace -> frontend web pods  TCP 8080
 nginx-ingress namespace -> backend API pods  TCP 8000
 backend API pods         -> PostgreSQL pods   TCP 5432
 migration pods           -> PostgreSQL pods   TCP 5432
-frontend/API/migration   -> CoreDNS            UDP/TCP 53
+backend API pods         -> Redis pods         TCP 6379
+Celery worker pods       -> Redis pods         TCP 6379
+Celery worker pods       -> PostgreSQL pods    TCP 5432
+frontend/API/migration/worker -> CoreDNS        UDP/TCP 53
 ```
 
 The legacy-named `allow-backend-from-frontend` object is an empty-ingress compatibility tombstone and grants no traffic. NetworkPolicy is connection-aware, so response packets for an allowed connection do not require reverse-direction allow policies.
@@ -221,7 +224,7 @@ The GitLab Agent uses `gitlab-deployer` in `gitlab-agent-inventory-lab`; its cha
 
 Secrets are not included. Separate lease/event permissions for agent leader election are scoped to `gitlab-agent-inventory-lab`; this is not cluster-admin or unrestricted cluster access.
 
-The application pipeline applies workload ServiceAccounts, backend/frontend Deployments and Services, Ingress, and NetworkPolicies. It intentionally does not apply the namespace, PostgreSQL, backend ConfigMap, Secrets, GitLab Agent installation, or deployer RBAC. Those are bootstrap/infrastructure responsibilities and must exist before a deployment.
+The application pipeline applies workload ServiceAccounts, exact-SHA backend/frontend/Celery Deployments, backend/frontend Services, Ingress, and NetworkPolicies. It intentionally does not apply the namespace, PostgreSQL, Redis, their Services, backend ConfigMap, Secrets, GitLab Agent installation, or deployer RBAC. Those are bootstrap/infrastructure responsibilities and must exist before a deployment. The PostgreSQL StatefulSet must be reconciled separately when adopting its dedicated ServiceAccount and fresh-volume ownership settings.
 
 ### CI/CD flow
 
@@ -229,9 +232,12 @@ Pushes to GitHub `main` run `.github/workflows/gitlab-trigger.yml`, which synchr
 
 1. Django checks/tests against a PostgreSQL 16 CI service, frontend lint/build, and a GitLab Agent/RBAC check that explicitly requires Secrets read access to be denied.
 2. Backend and frontend image builds, then publication of commit-SHA and `latest` tags to the Nexus hosted registry.
-3. Selection of the GitLab Agent context and application-manifest reconciliation.
-4. Creation of `backend-migration-$CI_COMMIT_SHORT_SHA` with the commit-specific backend image, followed by a 180-second completion wait and failure-log collection.
-5. Backend and frontend Deployment updates to the exact commit-specific images, change-cause annotations, and rollout waits.
+3. Trivy scans of the exact commit-SHA backend and frontend images; fixable HIGH/CRITICAL findings fail the pipeline before deployment.
+4. Acquisition of the `inventory-kubernetes` GitLab resource group and a best-effort comparison with the current default-branch commit. A confirmed stale release exits successfully before Kubernetes mutation; a transient lookup or parse failure is logged and does not incorrectly skip a release.
+5. Reconciliation of non-workload prerequisites, followed by creation of a uniquely named `migrate-$CI_COMMIT_SHORT_SHA-$CI_PIPELINE_IID-$CI_JOB_ID` Job using the exact backend image. The Job has a 600-second active deadline, retains finished resources for inspection, and blocks the release on failure.
+6. Rendering and application of backend, Celery, and frontend Deployments with exact commit-SHA images, in that order, with each rollout verified before continuing.
+
+Tracked application workload manifests contain the non-deployable `ci-render-required` image tag. CI validates that it replaces exactly one expected placeholder per manifest and applies only temporary rendered files. It never directly applies a mutable application image or follows an exact deployment with a tracked placeholder manifest.
 
 The cleanup stage is manual and prunes runner Docker data; it is not application or Nexus retention automation.
 
@@ -247,7 +253,7 @@ Current Dockerfile defaults and GitLab jobs pull base/tool images through the Ne
 192.168.122.1:8083/alpine/kubectl:1.35.4
 ```
 
-The backend and frontend Dockerfiles accept base-image build arguments and default to this proxy. The hosted registry on port `8084` stores project-built images. CI pushes both `$CI_COMMIT_SHORT_SHA` and `latest`, while the migration Job and final Deployment updates use the exact commit tag through `nexus.local:8084/inventory/...`. `latest` remains only the manifest/bootstrap placeholder and convenience tag.
+The backend and frontend Dockerfiles accept base-image build arguments and default to this proxy. The hosted registry on port `8084` stores project-built images. CI pushes both `$CI_COMMIT_SHORT_SHA` and `latest`, but Kubernetes release rendering uses only the exact commit tag through `nexus.local:8084/inventory/...`. `latest` is a registry convenience tag and is not referenced by application workload manifests.
 
 The manual `cleanup` CI job prunes old Docker data from the runner after 168 hours. It does not define or prove a Nexus retention policy.
 
@@ -267,6 +273,7 @@ Kubernetes persistence is different:
 
 ```text
 PostgreSQL -> Longhorn PVC (1 GiB, ReadWriteOnce)
+Redis      -> Longhorn PVC (1 GiB, ReadWriteOnce; AOF every second)
 backend static/media/tmp -> per-pod emptyDir
 frontend tmp -> per-pod emptyDir
 ```

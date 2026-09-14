@@ -36,7 +36,7 @@ spec:
         - name: nexus-registry-secret
       containers:
         - name: frontend
-          image: nexus.local:8084/inventory/frontend:latest
+          image: nexus.local:8084/inventory/frontend:ci-render-required
           imagePullPolicy: IfNotPresent
           securityContext:
             runAsNonRoot: true

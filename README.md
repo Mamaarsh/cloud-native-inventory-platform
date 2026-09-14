@@ -35,17 +35,17 @@ A DevOps-focused project that uses a Django, React, and PostgreSQL inventory pla
 - Application baseline: migration files through `inventory.0008_auditlog`, 246 backend test methods, and frontend lint/build checks
 - Multi-stage backend/frontend images; Gunicorn on port 8000 and unprivileged NGINX on port 8080
 - GitHub Actions synchronization to Hamgit and trigger-only GitLab pipelines
-- Backend/frontend tests, commit-SHA and `latest` image publication to Nexus, migration Jobs, and commit-SHA Kubernetes rollouts
-- Kubernetes Deployments for two backend and two frontend replicas, a single-replica PostgreSQL StatefulSet, Services, and host-based Ingress routing
-- Restricted Pod Security Admission, non-root containers, dropped capabilities, RuntimeDefault seccomp, dedicated backend/frontend/migration ServiceAccounts, and default-deny NetworkPolicies
-- Longhorn-backed PostgreSQL persistence using a 1 GiB `ReadWriteOnce` claim
+- Backend/frontend tests, commit-SHA and `latest` image publication to Nexus, and blocking Trivy scans for HIGH/CRITICAL image vulnerabilities
+- Serialized Kubernetes releases that render exact commit-SHA images, run a uniquely named migration Job, and roll out backend, Celery, then frontend only after migration succeeds
+- Kubernetes Deployments for backend, frontend, and Celery; PostgreSQL and Redis StatefulSets; Services; and host-based Ingress routing
+- Restricted Pod Security Admission, non-root containers, dropped capabilities, RuntimeDefault seccomp, dedicated workload ServiceAccounts, and default-deny NetworkPolicies
+- Longhorn-backed PostgreSQL and Redis persistence; PostgreSQL uses `fsGroup: 999` so fresh volumes are writable by its non-root process
 
 ### Next Stages
 
-- Image/dependency vulnerability scanning and stronger secret-management integration
+- Stronger secret-management integration
 - Prometheus, Grafana, application/infrastructure metrics, PromQL dashboards, and alerting
 - Centralized logging, backup/disaster-recovery procedures, and load/failure testing
-- Celery worker and Redis deployment for Kubernetes if asynchronous delivery is retained
 - Production TLS and a durable shared/object-storage design for uploaded media
 
 ## Architecture
@@ -65,7 +65,11 @@ flowchart LR
     Ingress -->|/| Frontend[React + NGINX :8080]
     Ingress -->|/api| Backend[Django + Gunicorn :8000]
     Backend -->|TCP 5432| DB[(PostgreSQL)]
+    Backend -->|TCP 6379| Redis[(Redis)]
+    Celery[Celery worker] -->|TCP 6379| Redis
+    Celery -->|TCP 5432| DB
     DB --> PVC[(Longhorn PVC)]
+    Redis --> RedisPVC[(Longhorn PVC)]
 ```
 
 Browser `/api` traffic goes directly from Ingress to the backend Service; the frontend pod is not an API hop. NetworkPolicies restrict the displayed application flows and required DNS. See the [architecture guide](docs/architecture.md) for security boundaries and current limitations.

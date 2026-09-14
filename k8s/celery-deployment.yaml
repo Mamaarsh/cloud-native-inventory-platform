@@ -32,7 +32,7 @@ spec:
         - name: nexus-registry-secret
       containers:
         - name: celery-worker
-          image: nexus.local:8084/inventory/backend:latest
+          image: nexus.local:8084/inventory/backend:ci-render-required
           imagePullPolicy: IfNotPresent
           command:
             - celery
