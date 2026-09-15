@@ -391,6 +391,51 @@ cleanup:
   image:
     name: 192.168.122.1:8083/docker:latest
     pull_policy: if-not-present
+  variables:
+    DOCKER_CLEANUP_RETENTION: "168h"
   script:
-    - docker system prune -af --filter "until=168h"
+    - |
+      set -eu
+
+      echo "Verifying access to the runner Docker daemon"
+      docker info >/dev/null
+
+      echo "Verifying that the Nexus container has its cleanup-protection label"
+      NEXUS_LABEL="$(docker container inspect \
+        --format '{{ index .Config.Labels "com.sonatype.name" }}' \
+        nexus 2>/dev/null || true)"
+      if [ -z "$NEXUS_LABEL" ]; then
+        echo "Refusing cleanup: the Nexus container or its protection label was not found."
+        exit 1
+      fi
+
+      echo "Docker disk usage before cleanup"
+      docker system df
+
+      echo "Docker images before cleanup"
+      docker image ls --digests
+
+      echo "Running containers whose images must remain protected"
+      docker container ls --format 'table {{.ID}}\t{{.Image}}\t{{.Names}}\t{{.Status}}'
+
+      echo "Removing stopped containers older than ${DOCKER_CLEANUP_RETENTION}"
+      docker container prune --force \
+        --filter "until=${DOCKER_CLEANUP_RETENTION}"
+
+      echo "Removing dangling images"
+      docker image prune --force
+
+      echo "Removing unused images older than ${DOCKER_CLEANUP_RETENTION}"
+      docker image prune --all --force \
+        --filter "until=${DOCKER_CLEANUP_RETENTION}"
+
+      echo "Removing unused build cache older than ${DOCKER_CLEANUP_RETENTION}"
+      docker builder prune --all --force \
+        --filter "until=${DOCKER_CLEANUP_RETENTION}"
+
+      echo "Docker disk usage after cleanup"
+      docker system df
+
+      echo "Docker images retained after cleanup"
+      docker image ls --digests
   when: manual
