@@ -1,0 +1,122 @@
+# kube-prometheus-stack 91.4.1
+# Runtime images are mirrored under the internal Nexus Docker registry.
+
+crds:
+  enabled: true
+  upgradeJob:
+    enabled: false
+
+windowsMonitoring:
+  enabled: false
+
+nodeExporter:
+  enabled: true
+  operatingSystems:
+    linux:
+      enabled: true
+    aix:
+      enabled: false
+    darwin:
+      enabled: false
+
+prometheus-node-exporter:
+  image:
+    registry: nexus.local:8084
+    repository: monitoring/prometheus/node-exporter
+    tag: v1.12.1
+    distroless: true
+
+kube-state-metrics:
+  image:
+    registry: nexus.local:8084
+    repository: monitoring/kube-state-metrics/kube-state-metrics
+    tag: v2.20.0
+
+grafana:
+  enabled: true
+  deploymentStrategy:
+    type: Recreate
+  image:
+    registry: nexus.local:8084
+    repository: monitoring/grafana/grafana
+    tag: 13.2.2-distroless
+  persistence:
+    enabled: true
+    type: pvc
+    storageClassName: longhorn-monitoring
+    accessModes:
+      - ReadWriteOnce
+    size: 1Gi
+  initChownData:
+    enabled: true
+    image:
+      registry: nexus.local:8084
+      repository: monitoring/library/busybox
+      tag: "1.38.0"
+  sidecar:
+    image:
+      registry: nexus.local:8084
+      repository: monitoring/kiwigrid/k8s-sidecar
+      tag: 2.11.2
+    dashboards:
+      enabled: true
+    datasources:
+      enabled: true
+  imageRenderer:
+    enabled: false
+  testFramework:
+    enabled: false
+  useStatefulSet: false
+
+alertmanager:
+  enabled: true
+  alertmanagerSpec:
+    image:
+      registry: nexus.local:8084
+      repository: monitoring/prometheus/alertmanager
+      tag: v0.34.0
+
+prometheusOperator:
+  image:
+    registry: nexus.local:8084
+    repository: monitoring/prometheus-operator/prometheus-operator
+    tag: v0.94.0
+    pullPolicy: IfNotPresent
+  prometheusConfigReloader:
+    image:
+      registry: nexus.local:8084
+      repository: monitoring/prometheus-operator/prometheus-config-reloader
+      tag: v0.94.0
+      pullPolicy: IfNotPresent
+  admissionWebhooks:
+    patch:
+      image:
+        registry: nexus.local:8084
+        repository: monitoring/jkroepke/kube-webhook-certgen
+        tag: 1.8.8
+  thanosImage:
+    registry: nexus.local:8084
+    repository: monitoring/thanos/thanos
+    tag: v0.42.4
+    pullPolicy: IfNotPresent
+
+prometheus:
+  prometheusSpec:
+    image:
+      registry: nexus.local:8084
+      repository: monitoring/prometheus/prometheus
+      tag: v3.14.0-distroless
+      pullPolicy: IfNotPresent
+    retention: 15d
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: longhorn-monitoring
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 5Gi
+
+thanosRuler:
+  enabled: false
