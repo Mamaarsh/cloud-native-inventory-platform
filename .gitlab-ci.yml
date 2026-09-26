@@ -48,7 +48,10 @@ backend-build:
     pull_policy: if-not-present
   script:
     - echo "Building Docker image"
-    - docker build -t inventory-backend:$CI_COMMIT_SHORT_SHA application/backend
+    - docker build
+        --build-arg PYTHON_BASE_IMAGE=192.168.122.1:8083/python:3.14-slim
+        -t inventory-backend:$CI_COMMIT_SHORT_SHA
+        application/backend
     - echo "Login to Nexus registry"
     - echo "$NEXUS_PASSWORD" | docker login -u "$NEXUS_USERNAME" --password-stdin "$NEXUS_REGISTRY"
     - echo "Tagging image"
@@ -85,7 +88,12 @@ frontend-build:
     pull_policy: if-not-present
   script:
     - echo "Building frontend Docker image"
-    - docker build --build-arg VITE_API_URL=/api -t inventory-frontend:$CI_COMMIT_SHORT_SHA application/frontend
+    - docker build
+        --build-arg NODE_BASE_IMAGE=192.168.122.1:8083/node:22-alpine
+        --build-arg NGINX_BASE_IMAGE=192.168.122.1:8083/nginxinc/nginx-unprivileged:alpine
+        --build-arg VITE_API_URL=/api
+        -t inventory-frontend:$CI_COMMIT_SHORT_SHA
+        application/frontend
     - echo "Login to Nexus registry"
     - echo "$NEXUS_PASSWORD" | docker login -u "$NEXUS_USERNAME" --password-stdin "$NEXUS_REGISTRY"
     - echo "Tagging frontend image"

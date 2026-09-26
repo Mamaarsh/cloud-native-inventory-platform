@@ -1,9 +1,31 @@
+x-backend-environment: &backend-environment
+  DB_NAME: ${DB_NAME}
+  DB_USER: ${DB_USER}
+  DB_PASSWORD: ${DB_PASSWORD}
+  DB_HOST: ${DB_HOST}
+  DB_PORT: ${DB_PORT}
+  CELERY_BROKER_URL: ${CELERY_BROKER_URL}
+  CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND}
+  SECRET_KEY: ${SECRET_KEY}
+  DEBUG: ${DEBUG}
+  ALLOWED_HOSTS: ${ALLOWED_HOSTS}
+  SECURE_SSL_REDIRECT: ${SECURE_SSL_REDIRECT}
+  SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE}
+  CSRF_COOKIE_SECURE: ${CSRF_COOKIE_SECURE}
+  SECURE_HSTS_SECONDS: ${SECURE_HSTS_SECONDS}
+  SECURE_HSTS_INCLUDE_SUBDOMAINS: ${SECURE_HSTS_INCLUDE_SUBDOMAINS}
+  SECURE_HSTS_PRELOAD: ${SECURE_HSTS_PRELOAD}
+  TRUST_X_FORWARDED_PROTO: ${TRUST_X_FORWARDED_PROTO}
+
+x-backend-build: &backend-build
+  context: ./application/backend
+  args:
+    PYTHON_BASE_IMAGE: ${NEXUS_DOCKER_GROUP:-docker.io/library}/python:3.14-slim
+
 services:
   backend:
-    build:
-      context: ./application/backend
-      args:
-        PYTHON_BASE_IMAGE: ${NEXUS_DOCKER_GROUP}/python:3.14-slim
+    image: inventory-backend:local
+    build: *backend-build
     container_name: inventory-backend
     restart: unless-stopped
     env_file:
@@ -15,24 +37,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    environment:
-      DB_NAME: ${DB_NAME}
-      DB_USER: ${DB_USER}
-      DB_PASSWORD: ${DB_PASSWORD}
-      DB_HOST: ${DB_HOST}
-      DB_PORT: ${DB_PORT}
-      CELERY_BROKER_URL: ${CELERY_BROKER_URL}
-      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND}
-      SECRET_KEY: ${SECRET_KEY}
-      DEBUG: ${DEBUG}
-      ALLOWED_HOSTS: ${ALLOWED_HOSTS}
-      SECURE_SSL_REDIRECT: ${SECURE_SSL_REDIRECT}
-      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE}
-      CSRF_COOKIE_SECURE: ${CSRF_COOKIE_SECURE}
-      SECURE_HSTS_SECONDS: ${SECURE_HSTS_SECONDS}
-      SECURE_HSTS_INCLUDE_SUBDOMAINS: ${SECURE_HSTS_INCLUDE_SUBDOMAINS}
-      SECURE_HSTS_PRELOAD: ${SECURE_HSTS_PRELOAD}
-      TRUST_X_FORWARDED_PROTO: ${TRUST_X_FORWARDED_PROTO}
+    environment: *backend-environment
     volumes:
       - static_data:/app/staticfiles
       - media_data:/app/media
@@ -56,12 +61,12 @@ services:
       context: ./application/frontend
       args:
         VITE_API_URL: /api
-        NODE_BASE_IMAGE: ${NEXUS_DOCKER_GROUP}/node:22-alpine
-        NGINX_BASE_IMAGE: ${NEXUS_DOCKER_GROUP}/nginx:alpine
+        NODE_BASE_IMAGE: ${NEXUS_DOCKER_GROUP:-docker.io/library}/node:22-alpine
+        NGINX_BASE_IMAGE: ${NGINX_BASE_IMAGE:-docker.io/nginxinc/nginx-unprivileged:alpine}
     container_name: inventory-frontend
     restart: unless-stopped
     ports:
-      - "80:80"
+      - "${FRONTEND_PORT:-8080}:8080"
     volumes:
       - static_data:/var/www/static:ro
       - media_data:/var/www/media:ro
@@ -71,8 +76,27 @@ services:
     networks:
       - inventory_network
 
+  celery:
+    image: inventory-backend:local
+    build: *backend-build
+    container_name: inventory-celery
+    restart: unless-stopped
+    command: celery -A config worker --loglevel=INFO
+    env_file:
+      - .env
+    environment: *backend-environment
+    depends_on:
+      backend:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - inventory_network
+
   postgres:
-    image: ${NEXUS_DOCKER_GROUP}/postgres:16-alpine
+    image: ${NEXUS_DOCKER_GROUP:-docker.io/library}/postgres:16-alpine
     container_name: inventory-postgres
     restart: unless-stopped
     environment:
@@ -94,7 +118,7 @@ services:
       retries: 5
 
   redis:
-    image: ${NEXUS_DOCKER_GROUP}/redis:7-alpine
+    image: ${NEXUS_DOCKER_GROUP:-docker.io/library}/redis:7-alpine
     container_name: inventory-redis
     restart: unless-stopped
     networks:
