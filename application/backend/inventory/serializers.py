@@ -16,8 +16,18 @@ from .services import adjust_inventory, create_order
 from .services.stock import MAX_INVENTORY_QUANTITY
 from .validators import validate_product_image
 
+
+class RelativeImageField(serializers.ImageField):
+    """Serialize media as a deployment-independent path."""
+
+    def to_representation(self, value):
+        if not value:
+            return None
+        return value.url
+
+
 class ProductSerializer(serializers.ModelSerializer):
-    image = serializers.ImageField(
+    image = RelativeImageField(
         required=False,
         allow_null=False,
         validators=(validate_product_image,),
@@ -219,6 +229,8 @@ class InventoryAdjustmentSerializer(serializers.Serializer):
         return attrs
 
 class OrderProductSerializer(serializers.ModelSerializer):
+    image = RelativeImageField(read_only=True)
+
     class Meta:
         model = Product
         fields = (

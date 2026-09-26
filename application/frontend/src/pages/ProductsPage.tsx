@@ -176,7 +176,11 @@ export function ProductsPage() {
                     >
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
-                          <ProductImage src={product.image} size="sm" />
+                          <ProductImage
+                            src={product.image}
+                            alt={product.name}
+                            size="sm"
+                          />
                           <div className="min-w-0">
                             <Link
                               to={productPath(product.id)}

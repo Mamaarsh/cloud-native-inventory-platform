@@ -1,7 +1,4 @@
 const apiBaseUrl = import.meta.env.VITE_API_URL?.trim();
-const developmentProxyTarget = import.meta.env.DEV
-  ? import.meta.env.VITE_API_PROXY_TARGET?.trim()
-  : undefined;
 const productMediaPathPrefix = "/media/products/";
 
 function absoluteOrigin(value: string | undefined): string | null {
@@ -16,7 +13,6 @@ function absoluteOrigin(value: string | undefined): string | null {
 
 function mediaOrigin(): string {
   return absoluteOrigin(apiBaseUrl)
-    ?? absoluteOrigin(developmentProxyTarget)
     ?? window.location.origin;
 }
 
@@ -27,10 +23,16 @@ export function resolveMediaUrl(source: string | null | undefined): string | nul
   if (normalizedSource.startsWith("blob:")) return normalizedSource;
 
   try {
-    const url = new URL(normalizedSource, mediaOrigin());
-    const isHttpUrl = url.protocol === "http:" || url.protocol === "https:";
-    const isProductMedia = url.pathname.startsWith(productMediaPathPrefix);
-    return isHttpUrl && isProductMedia ? url.toString() : null;
+    const sourceUrl = new URL(normalizedSource, mediaOrigin());
+    const isHttpUrl =
+      sourceUrl.protocol === "http:" || sourceUrl.protocol === "https:";
+    const isProductMedia = sourceUrl.pathname.startsWith(productMediaPathPrefix);
+    if (!isHttpUrl || !isProductMedia) return null;
+
+    const browserUrl = new URL(sourceUrl.pathname, mediaOrigin());
+    browserUrl.search = sourceUrl.search;
+    browserUrl.hash = sourceUrl.hash;
+    return browserUrl.toString();
   } catch {
     return null;
   }

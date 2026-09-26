@@ -1138,8 +1138,10 @@ class ProductImageAPITests(APITestCase):
         product = Product.objects.get(pk=response.json()["id"])
         image_url = response.json()["image"]
 
-        self.assertTrue(image_url.endswith(product.image.url))
+        self.assertEqual(image_url, product.image.url)
+        self.assertTrue(image_url.startswith("/"))
         self.assertIn("/media/products/", image_url)
+        self.assertNotIn("testserver", image_url)
         self.assertNotIn(self.temporary_media.name, image_url)
 
     def test_patch_without_image_preserves_existing_image(self):
@@ -1304,16 +1306,15 @@ class ProductImageAPITests(APITestCase):
 
         self.assertEqual(detail_response.status_code, status.HTTP_200_OK)
         detail_image = detail_response.json()["items"][0]["product"]["image"]
-        self.assertTrue(detail_image.endswith(product.image.url))
+        self.assertEqual(detail_image, product.image.url)
         listed_order = next(
             item
             for item in list_response.json()["results"]
             if item["id"] == order.pk
         )
-        self.assertTrue(
-            listed_order["items"][0]["product"]["image"].endswith(
-                product.image.url
-            )
+        self.assertEqual(
+            listed_order["items"][0]["product"]["image"],
+            product.image.url,
         )
 
     def test_order_without_product_image_serializes_null(self):
@@ -1353,7 +1354,7 @@ class ProductImageAPITests(APITestCase):
         )
 
         item = response.json()["items"][0]
-        self.assertTrue(item["product"]["image"].endswith(product.image.url))
+        self.assertEqual(item["product"]["image"], product.image.url)
         self.assertEqual(Decimal(item["unit_price"]), historical_price)
 
 

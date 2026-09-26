@@ -129,7 +129,7 @@ The list accepts `status=pending|active` and `ordering=<field>`. Role assignment
 | `PUT/PATCH` | `/api/v1/products/{id}/` | Update or activate/deactivate |
 | `DELETE` | `/api/v1/products/{id}/` | Permanently delete an unused product |
 
-All authenticated users may read products; only Admin may mutate them. Fields include `id`, `name`, `sku`, `price`, `image`, `is_active`, and timestamps.
+All authenticated users may read products; only Admin may mutate them. Fields include `id`, `name`, `sku`, `price`, `image`, `is_active`, and timestamps. When present, `image` is a deployment-independent relative `/media/products/` path; clients resolve it against their browser-visible application or API origin.
 
 Create/update supports JSON when no image file is sent and `multipart/form-data` for an upload. Images must be actual JPEG, PNG, or WebP files and no larger than 5 MiB. `remove_image=true` explicitly removes the current image. The frontend-container NGINX configuration permits `/api/` request bodies up to `6m` for its direct proxy path. Kubernetes `/api` traffic bypasses that container, and the Ingress manifest sets no body-size annotation, so the installed Ingress controller's configuration also determines the effective Kubernetes upload limit. Django remains authoritative for the 5 MiB file rule.
 

@@ -12,13 +12,13 @@ This document maps the implemented React UI to the authoritative Django REST Fra
 | Server state | Hooks in `src/hooks/` using TanStack Query | Paginated DRF list responses, normally 10/page |
 | Roles | `ProtectedRoute`, `RoleProtectedRoute`, `RoleGuard` | DRF permission classes are authoritative |
 | Errors | `src/lib/api-error.ts` | Field errors and safe `detail` JSON responses |
-| Media | `ProductImage` + `src/lib/media-url.ts` | Product `image` is a media URL or `null` |
+| Media | `ProductImage` + `src/lib/media-url.ts` | Product `image` is a relative `/media/products/` URL or `null` |
 
 The client retries one eligible `401` after refreshing the access token. If refresh fails, it clears the local session and redirects to `/login`. Tokens are stored in `localStorage`; client logout does not revoke issued JWTs on the server.
 
 List pages debounce search by approximately 300 ms, preserve previous query data during background refetches, and use DRF `count`, `next`, `previous`, and `results`.
 
-In Kubernetes, `inventory.local` Ingress routes `/api` directly to the backend Service and `/` to the frontend Service. Although the frontend image retains an NGINX `/api/` proxy, the Kubernetes NetworkPolicies do not authorize frontend-to-backend TCP; that proxy is not part of the deployed browser request path.
+In Kubernetes, `inventory.local` Ingress routes `/api` directly to the backend Service and `/media` plus `/` to the frontend Service. Although the frontend image retains an NGINX `/api/` proxy, the Kubernetes NetworkPolicies do not authorize frontend-to-backend TCP; that proxy is not part of the deployed browser request path.
 
 ## Public authentication
 
@@ -65,7 +65,7 @@ Frontend files: `ProductsPage`, `ProductDetailPage`, `ProductForm`, `ProductImag
 | Edit/activate/deactivate | `PATCH /api/v1/products/{id}/` | Changed fields; optional image or `remove_image=true` | Admin |
 | Delete | `DELETE /api/v1/products/{id}/` | `204` or safe `409` detail | Admin |
 
-`Product` includes `image: string | null`. `ProductImage` resolves allowed product media paths against the configured backend origin, keeps null/broken-image fallbacks, and renders consistent sizes. Product forms preview selected files and accept only JPEG/PNG/WebP up to 5 MiB before submission; Django repeats authoritative content/size validation.
+`Product` includes `image: string | null`; Django returns a deployment-independent relative path. `ProductImage` accepts only `/media/products/` paths and rebuilds even stale absolute responses on the browser-visible API or same-origin base, keeping null/broken-image fallbacks and consistent sizes. Product forms preview selected files and accept only JPEG/PNG/WebP up to 5 MiB before submission; Django repeats authoritative content/size validation.
 
 The frontend does not manually set multipart `Content-Type`, allowing the browser to add its boundary. Image removal is sent only after an explicit user action. A `409` protected-deletion message remains visible in the busy-safe confirmation modal and advises deactivation; HTML/non-JSON errors are replaced by safe generic text.
 
@@ -151,7 +151,7 @@ The current SPA does not poll health endpoints or claim live connectivity. Opera
 - `/api/health/dependencies/`
 - `/api/schema/`, `/api/docs/`, and `/api/redoc/`
 
-There is no public Notification API and no frontend notification inbox. The backend model/service/task exists. Compose has Redis but no Celery worker; Kubernetes has neither Redis nor a worker. The UI does not claim asynchronous delivery.
+There is no public Notification API and no frontend notification inbox. The backend model/service/task exists, and both Compose and Kubernetes run Redis plus a Celery worker with the persisted mock notification provider. The UI does not claim an external notification channel.
 
 ## Permission-aware presentation
 
