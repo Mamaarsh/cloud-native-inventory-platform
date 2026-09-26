@@ -66,6 +66,7 @@ Use untracked environment values or a secret manager. Never store passwords, sig
 ```bash
 python manage.py check
 python manage.py makemigrations --check --dry-run
+python manage.py collectstatic --noinput
 python manage.py test
 python manage.py spectacular --file schema.yml --validate
 ```
@@ -74,7 +75,7 @@ Migrations currently extend through `inventory.0008_auditlog`, and the source co
 
 ## Production runtime
 
-The Docker image uses configurable `PYTHON_BASE_IMAGE`, defaulting to the lab Nexus proxy at `192.168.122.1:8083/python:3.14-slim`. Its entrypoint runs `collectstatic` only; it does not run database migrations. Gunicorn uses three synchronous workers and listens on `0.0.0.0:8000`.
+The Docker image uses configurable `PYTHON_BASE_IMAGE`, defaulting to public `docker.io/library/python:3.14-slim`. GitLab CI overrides it with the lab Nexus proxy. Its entrypoint runs `collectstatic` only; it does not run database migrations. Gunicorn uses three synchronous workers and listens on `0.0.0.0:8000`.
 
 Compose mounts:
 
@@ -82,11 +83,11 @@ Compose mounts:
 - `/app/media` to `media_data` for Nginx `/media/` delivery; and
 - PostgreSQL data to `postgres_data`.
 
-Compose users must run migrations explicitly. The repository-root Compose configuration also retains a legacy Nexus prefix and a frontend port/base-image mismatch; see the repository [architecture guide](../../docs/architecture.md#docker-compose-runtime) before using it as an end-to-end runtime.
+Compose users must run migrations explicitly. The repository-root stack uses public images by default, publishes the frontend on `http://localhost:8080`, and starts a Celery worker. Lab Nexus values can be supplied through the untracked root `.env`.
 
 In Kubernetes, migration execution is separated into `backend-migration-$CI_COMMIT_SHORT_SHA`. The Job runs `python manage.py migrate --noinput` and `python manage.py create_roles` before CI rolls out the application image.
 
-The backend Deployment uses `backend-sa`, disables automatic ServiceAccount-token mounting, and runs as UID/GID 999 with privilege escalation disabled, all capabilities dropped, `RuntimeDefault` seccomp, and a read-only root filesystem. Writable `emptyDir` mounts are limited to `/app/staticfiles`, `/app/media`, and `/tmp`. These volumes are per-pod and ephemeral; Kubernetes media is neither persistent nor shared across the two backend replicas.
+The backend Deployment uses `backend-sa`, disables automatic ServiceAccount-token mounting, and runs as UID/GID 999 with privilege escalation disabled, all capabilities dropped, `RuntimeDefault` seccomp, and a read-only root filesystem. `/app/staticfiles` and `/tmp` use writable per-pod `emptyDir` volumes. `/app/media` uses the shared 2 GiB Longhorn RWX `media` claim so both backend replicas see uploaded files. Its `longhorn-media` class requests two replicas only on `application`-tagged disks; monitoring storage remains isolated. The cluster must provide Longhorn share-manager/NFS support. Every node eligible for a backend pod must have an NFS client (`nfs-common` on Ubuntu).
 
 ## API operations
 
@@ -103,5 +104,5 @@ The backend Deployment uses `backend-sa`, disables automatic ServiceAccount-toke
 - Inventory movement, order status, and audit histories are immutable through normal API/Admin paths, not against privileged database or queryset-level access.
 - Product and warehouse foreign-key protection preserves referenced operational history and returns a safe `409 Conflict` from the API.
 - The payment provider is a persisted mock/local implementation.
-- Notification models, services, and Celery tasks exist. Compose defines Redis but no Celery worker; Kubernetes defines neither Redis nor a worker, and its NetworkPolicies do not authorize Redis egress.
+- Notification models, services, and Celery tasks exist. Compose and Kubernetes both define Redis and a Celery worker; delivery uses the current persisted mock provider rather than an external notification service.
 - Password changes do not revoke previously issued JWTs; additional blacklist/revocation work would be required.

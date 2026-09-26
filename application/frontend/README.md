@@ -72,7 +72,7 @@ Relative `/api` and `/media` paths keep browser requests same-origin. Product im
 
 ## Production runtime
 
-The multi-stage Dockerfile builds the Vite bundle with configurable `NODE_BASE_IMAGE` and serves it with configurable `NGINX_BASE_IMAGE`. Defaults use the Nexus proxy on port `8083` and `nginxinc/nginx-unprivileged:alpine`. NGINX listens on container port `8080` and:
+The multi-stage Dockerfile builds the Vite bundle with configurable `NODE_BASE_IMAGE` and serves it with configurable `NGINX_BASE_IMAGE`. Defaults use public Node and `nginxinc/nginx-unprivileged` images; GitLab CI overrides them with the Nexus proxy. NGINX listens on container port `8080` and:
 
 - serves the SPA with a fallback to `index.html`;
 - contains a `/api/` proxy to the Gunicorn backend for direct-container/Compose routing;
@@ -81,11 +81,9 @@ The multi-stage Dockerfile builds the Vite bundle with configurable `NODE_BASE_I
 
 In Kubernetes, `inventory.local` Ingress routes browser `/api` requests directly to the backend Service and `/` to the frontend Service. The frontend pod is not an API hop, and NetworkPolicy does not permit frontend-to-backend TCP. The retained `/api/` proxy is therefore redundant for the deployed Ingress path.
 
-The Kubernetes Deployment runs as UID/GID 101 with `frontend-sa`, disables automatic ServiceAccount-token mounting, disables privilege escalation, drops all capabilities, uses `RuntimeDefault` seccomp, and makes the root filesystem read-only. Only `/tmp` is mounted writable through `emptyDir`.
+The Kubernetes Deployment runs as UID/GID 101 with `frontend-sa`, disables automatic ServiceAccount-token mounting, disables privilege escalation, drops all capabilities, uses `RuntimeDefault` seccomp, and makes the root filesystem read-only. `/tmp` is writable through `emptyDir`; the shared 2 GiB Longhorn RWX `media` claim is mounted read-only at `/var/www/media`. Ingress routes `/media` to frontend NGINX, while backend replicas write the same claim. The dedicated `longhorn-media` class uses two replicas on `application`-tagged disks and requires Longhorn RWX/share-manager support; every node eligible for a frontend pod needs an NFS client (`nfs-common` on Ubuntu); it does not consume `monitoring`-tagged disks.
 
-Kubernetes does not mount the backend media/static `emptyDir` volumes into the frontend pod. Uploaded media is currently ephemeral and not a reliable multi-replica Kubernetes delivery path.
-
-The repository-root Compose file still overrides the frontend base to `nginx:alpine` and maps host `80` to container `80`, which does not match this port-8080 unprivileged configuration. Reconcile those Compose values before using it as an end-to-end frontend runtime.
+The repository-root Compose file maps `${FRONTEND_PORT:-8080}` to container port `8080` and keeps `/api`, `/static`, and `/media` same-origin through NGINX.
 
 ## Validation
 
@@ -100,4 +98,4 @@ The production bundle is emitted to `dist/`. There is currently no frontend auto
 
 - Access and refresh tokens are stored in `localStorage`; logout clears the current browser session but does not revoke already-issued JWTs server-side.
 - RBAC, validation, stock changes, status transitions, payments, and audit behavior are enforced by the backend.
-- Compose does not run a Celery worker. Kubernetes deploys neither Redis nor a worker, so asynchronous notification delivery remains future operational work.
+- Compose and Kubernetes run Redis plus a Celery worker. Notification delivery currently uses the persisted mock provider; external email/SMS/chat delivery is not implemented.
