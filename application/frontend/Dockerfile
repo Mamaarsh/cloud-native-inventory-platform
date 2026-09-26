@@ -20,6 +20,12 @@ RUN npm run build
 # ---------- Production ----------
 FROM ${NGINX_BASE_IMAGE}
 
+USER root
+
+RUN apk upgrade --no-cache libexpat
+
+USER 101
+
 COPY --from=builder /app/dist /usr/share/nginx/html
 
 COPY nginx.conf /etc/nginx/conf.d/default.conf
