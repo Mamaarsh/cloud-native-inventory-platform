@@ -60,6 +60,9 @@ grafana:
       tag: 2.11.2
     dashboards:
       enabled: true
+      label: grafana_dashboard
+      labelValue: "1"
+      searchNamespace: monitoring
     datasources:
       enabled: true
   imageRenderer:

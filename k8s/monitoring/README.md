@@ -1,237 +1,118 @@
 # Kubernetes Monitoring
 
-This directory contains the production-like monitoring foundation deployed on the kubeadm Kubernetes cluster.
+This directory is the declarative monitoring layer for the kubeadm lab. It contains the pinned Helm values, NGINX metrics discovery, and the Grafana dashboard source. See the full [observability guide](../../docs/observability.md) for metric semantics and PromQL.
 
-## Stack
+## Verified repository configuration
 
-* Chart: `nexus-prometheus/kube-prometheus-stack`
-* Chart version: `91.4.1`
-* Namespace: `monitoring`
-* Prometheus Operator: Enabled
-* Grafana: Enabled
-* Alertmanager: Enabled
-* kube-state-metrics: Enabled
-* node-exporter: Enabled
+| Setting | Tracked value |
+|---|---|
+| Helm repository alias | `nexus-prometheus` |
+| Chart | `kube-prometheus-stack` |
+| Chart version | `91.4.1` |
+| Release / namespace | `monitoring` / `monitoring` |
+| Prometheus retention | `15d` |
+| Prometheus storage | `5Gi`, RWO, `longhorn-monitoring` |
+| Grafana storage | `1Gi`, RWO, `longhorn-monitoring` |
+| Dashboard sidecar label | `grafana_dashboard: "1"` |
+| Runtime image registry | `nexus.local:8084/monitoring/...` |
 
-## Registry and Offline Image Strategy
+Enabled components are Prometheus, Grafana, Alertmanager, Prometheus Operator, kube-state-metrics, and node-exporter. The values also pin mirrored images for supporting sidecars/webhook jobs. The StorageClass and its replica policy are external; the lab expects `longhorn-monitoring` to use two replicas across worker nodes, but verify that on the target cluster.
 
-All monitoring images are mirrored through the internal Nexus Docker registry.
+The last recorded lab setup reported a deployed release and healthy standard cluster targets. This repository's currently configured kubectl context may not be that lab, so those observations are not a substitute for current runtime checks.
 
-Registry:
+## Files
 
-```
-nexus.local:8084/monitoring/
-```
-
-The original deployment attempted to use:
-
-```
-192.168.122.1:8084
-```
-
-which caused image pull failures because Nexus serves HTTPS while containerd was configured for HTTP access.
-
-The monitoring values file was updated so every rendered runtime image uses the internal Nexus mirror.
-
-Verified:
-
-* Containerd image pulls succeed from Kubernetes nodes.
-* No running monitoring workload references public registries.
-* No monitoring workload references `192.168.122.1:8084`.
-
-Public registries are not required during monitoring deployment.
-
-## Storage Configuration
-
-Monitoring workloads use dedicated Longhorn storage.
-
-StorageClass:
-
-```
-longhorn-monitoring
+```text
+values-monitoring.yaml                 Helm values and mirrored image pins
+nginx-ingress-metrics-json-patch.yaml Append-only metrics/latency flags
+nginx-ingress-metrics-service.yaml    Private :9113 ClusterIP Service
+nginx-ingress-servicemonitor.yaml     Prometheus Operator discovery
+dashboards/                            Dashboard JSON and ConfigMap generator
 ```
 
-Configuration:
+## Install or upgrade the stack
 
-### Prometheus
-
-* Storage size: `5Gi`
-* Access mode: `ReadWriteOnce`
-* Retention: `15 days`
-* Replica count: `2`
-
-### Grafana
-
-* Storage size: `1Gi`
-* Access mode: `ReadWriteOnce`
-* Replica count: `2`
-
-The dedicated Longhorn storage class was created because the original configuration expected three replicas while only two storage nodes were available.
-
-Monitoring volumes are currently:
-
-```
-attached
-healthy
-```
-
-Existing application volumes such as PostgreSQL and Redis were not modified.
-
-## Deployment Status
-
-Monitoring was successfully deployed using:
+The repository alias points to the internal chart mirror:
 
 ```bash
+helm repo list
+helm search repo nexus-prometheus/kube-prometheus-stack --versions
+
 helm upgrade --install monitoring \
   nexus-prometheus/kube-prometheus-stack \
   --version 91.4.1 \
   --namespace monitoring \
   --create-namespace \
-  -f values-monitoring.yaml \
+  -f k8s/monitoring/values-monitoring.yaml \
   --wait
 ```
 
-Current Helm status:
+The chart and image mirror require the lab Nexus. This monitoring install is not part of the public Compose quick start.
 
-```
-STATUS: deployed
-REVISION: 1
-```
+## Enable NGINX metrics
 
-## Running Components
-
-The following workloads are healthy:
-
-* Prometheus
-* Grafana
-* Alertmanager
-* Prometheus Operator
-* kube-state-metrics
-* node-exporter
-
-Validation:
+The F5 NGINX controller is installed outside this repository. Check its name, container order, labels, and existing args before using the lab-specific patch:
 
 ```bash
-kubectl get pods -n monitoring
+kubectl get deployment nginx-ingress -n nginx-ingress -o yaml
+kubectl patch deployment nginx-ingress -n nginx-ingress \
+  --type=json \
+  --patch-file k8s/monitoring/nginx-ingress-metrics-json-patch.yaml
+kubectl rollout status deployment/nginx-ingress -n nginx-ingress
+
+kubectl apply -f k8s/monitoring/nginx-ingress-metrics-service.yaml
+kubectl apply -f k8s/monitoring/nginx-ingress-servicemonitor.yaml
 ```
 
-Expected result:
+The patch appends `-enable-prometheus-metrics` and `-enable-latency-metrics` without replacing existing arguments. It is not idempotent when flags already exist, so inspect first. The LoadBalancer Service continues to expose only ports 80 and 443; metrics remain cluster-internal.
 
-* All monitoring pods are `Running`
-* All containers are `Ready`
+## Provision the dashboard
 
-## Prometheus Targets
-
-Prometheus successfully discovers and scrapes cluster metrics.
-
-Current target health:
-
-```
-28/28 targets UP
+```bash
+jq empty k8s/monitoring/dashboards/kubernetes-cluster-monitoring.json
+kubectl kustomize k8s/monitoring/dashboards
+kubectl apply -k k8s/monitoring/dashboards
 ```
 
-Collected metrics include:
+Kustomize creates `grafana-dashboard-kubernetes-cluster-monitoring` with the sidecar label. Grafana loads **Kubernetes Cluster Monitoring** from the ConfigMap.
 
-* Kubernetes API metrics
-* kubelet metrics
-* node metrics
-* kube-state-metrics
-* node-exporter metrics
-* controller-manager metrics
-* scheduler metrics
-* etcd metrics
+## Validate
 
-## Kubernetes Metrics Endpoint Configuration
+```bash
+helm template monitoring nexus-prometheus/kube-prometheus-stack \
+  --version 91.4.1 \
+  --namespace monitoring \
+  -f k8s/monitoring/values-monitoring.yaml >/tmp/monitoring-rendered.yaml
 
-Several kubeadm components originally exposed metrics only through loopback interfaces.
+kubectl get pods,pvc -n monitoring
+kubectl get service,endpoints -n nginx-ingress nginx-ingress-metrics
+kubectl get servicemonitor -n monitoring nginx-ingress
+```
 
-Updated components:
+Check Prometheus **Status → Targets** for the NGINX ServiceMonitor and query:
 
-* kube-controller-manager
-* kube-scheduler
-* etcd
-* kube-proxy
-
-Prometheus scraping access was also allowed through firewall rules for required metrics ports.
+```promql
+nginx_ingress_nginx_http_requests_total
+nginx_ingress_nginx_connections_active
+nginx_ingress_controller_upstream_server_response_latency_ms_count
+nginx_ingress_controller_nginx_last_reload_status
+```
 
 ## Access
 
-Monitoring services are currently exposed internally using ClusterIP.
-
-Temporary access:
-
-Grafana:
+Services remain ClusterIP-only. Use temporary port-forwarding:
 
 ```bash
-kubectl port-forward svc/monitoring-grafana \
--n monitoring 3000:80
+kubectl port-forward -n monitoring svc/monitoring-grafana 3000:80
+kubectl port-forward -n monitoring svc/monitoring-kube-prometheus-prometheus 9090:9090
 ```
 
-Open:
+Grafana credentials come from the Helm-managed Kubernetes Secret. Do not record or commit them.
 
-```
-http://localhost:3000
-```
+## Boundaries
 
-Prometheus:
-
-```bash
-kubectl port-forward svc/monitoring-kube-prometheus-prometheus \
--n monitoring 9090:9090
-```
-
-Open:
-
-```
-http://localhost:9090
-```
-
-## Validation Commands
-
-Helm:
-
-```bash
-helm list -n monitoring
-helm status monitoring -n monitoring
-```
-
-Kubernetes:
-
-```bash
-kubectl get all -n monitoring
-kubectl get pvc -n monitoring
-```
-
-Prometheus:
-
-```bash
-kubectl get servicemonitor -n monitoring
-kubectl get prometheusrules -n monitoring
-```
-
-## Remaining Improvements
-
-The monitoring foundation is deployed successfully.
-
-Future improvements:
-
-* Add Ingress access for Grafana and Prometheus.
-* Install Metrics Server for `kubectl top`.
-* Create custom Grafana dashboards.
-* Build PromQL alert rules.
-* Monitor application workloads such as Django, PostgreSQL and Redis.
-* Review existing degraded Longhorn application volumes separately.
-
-## Backup
-
-Before recovery changes, the original values file was backed up:
-
-```
-values-monitoring.yaml.bak-20260918-pre-recovery
-```
-
-Additional Kubernetes metric configuration backups:
-
-```
-monitoring-backups/20260918-kube-metrics/
-```
+- Metrics Server is separate and not represented here.
+- Alertmanager runs, but no custom notification receivers are configured in Git.
+- There are no application/DB/broker exporters or custom PrometheusRule resources yet.
+- Host firewall rules and kubeadm control-plane metric bind addresses are external cluster configuration.
+- No public Grafana/Prometheus Ingress, centralized logging, distributed tracing, or monitoring backup workflow is implemented.

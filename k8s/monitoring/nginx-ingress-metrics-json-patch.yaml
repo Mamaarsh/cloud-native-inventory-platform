@@ -1,0 +1,6 @@
+- op: add
+  path: /spec/template/spec/containers/0/args/-
+  value: -enable-prometheus-metrics
+- op: add
+  path: /spec/template/spec/containers/0/args/-
+  value: -enable-latency-metrics

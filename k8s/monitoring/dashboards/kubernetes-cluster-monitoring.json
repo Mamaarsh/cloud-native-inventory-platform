@@ -1,0 +1,197 @@
+{
+  "annotations": {"list": [{"builtIn": 1, "datasource": {"type": "grafana", "uid": "-- Grafana --"}, "enable": true, "hide": true, "iconColor": "rgba(0, 211, 255, 1)", "name": "Annotations & Alerts", "type": "dashboard"}]},
+  "description": "Infrastructure, Kubernetes workload, and F5 NGINX Ingress signals for the Cloud Native Inventory Platform lab.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "fieldConfig": {"defaults": {"max": 100, "min": 0, "unit": "percent"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "id": 1,
+      "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"expr": "100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[$__rate_interval])) * 100)", "legendFormat": "{{instance}}", "refId": "A"}],
+      "title": "Node CPU Usage %",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "fieldConfig": {"defaults": {"max": 100, "min": 0, "unit": "percent"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "id": 2,
+      "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"expr": "100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)", "legendFormat": "{{instance}}", "refId": "A"}],
+      "title": "Node Memory Usage %",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "fieldConfig": {"defaults": {"max": 100, "min": 0, "unit": "percent"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 8},
+      "id": 3,
+      "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"expr": "100 * (1 - node_filesystem_avail_bytes{mountpoint=\"/\",fstype!~\"tmpfs|overlay\"} / node_filesystem_size_bytes{mountpoint=\"/\",fstype!~\"tmpfs|overlay\"})", "legendFormat": "{{instance}}", "refId": "A"}],
+      "title": "Root Filesystem Usage %",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "fieldConfig": {"defaults": {"unit": "Bps"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 8},
+      "id": 4,
+      "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"expr": "sum by (instance) (rate(node_network_receive_bytes_total{device!=\"lo\"}[$__rate_interval]))", "legendFormat": "{{instance}}", "refId": "A"}],
+      "title": "Network Receive Throughput",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "fieldConfig": {"defaults": {"unit": "Bps"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 8},
+      "id": 5,
+      "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"expr": "sum by (instance) (rate(node_network_transmit_bytes_total{device!=\"lo\"}[$__rate_interval]))", "legendFormat": "{{instance}}", "refId": "A"}],
+      "title": "Network Transmit Throughput",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "fieldConfig": {"defaults": {"unit": "cores"}, "overrides": []},
+      "gridPos": {"h": 9, "w": 12, "x": 0, "y": 16},
+      "id": 6,
+      "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "right", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"expr": "topk(5, sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{container!=\"\",container!=\"POD\",pod!=\"\"}[$__rate_interval])))", "legendFormat": "{{namespace}} / {{pod}}", "refId": "A"}],
+      "title": "Top Pods by CPU",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "fieldConfig": {"defaults": {"unit": "bytes"}, "overrides": []},
+      "gridPos": {"h": 9, "w": 12, "x": 12, "y": 16},
+      "id": 7,
+      "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "right", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"expr": "topk(5, sum by (namespace, pod) (container_memory_working_set_bytes{container!=\"\",container!=\"POD\",pod!=\"\"}))", "legendFormat": "{{namespace}} / {{pod}}", "refId": "A"}],
+      "title": "Top Pods by Memory",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "fieldConfig": {"defaults": {"decimals": 0, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 25},
+      "id": 8,
+      "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"expr": "sum by (namespace) (kube_pod_info)", "legendFormat": "{{namespace}}", "refId": "A"}],
+      "title": "Pod Count by Namespace",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "fieldConfig": {"defaults": {"decimals": 0, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 25},
+      "id": 9,
+      "options": {"legend": {"calcs": ["sum"], "displayMode": "table", "placement": "right", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"expr": "sum by (namespace, pod) (increase(kube_pod_container_status_restarts_total[$__rate_interval]))", "legendFormat": "{{namespace}} / {{pod}}", "refId": "A"}],
+      "title": "Container Restart Activity",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 33},
+      "id": 10,
+      "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "list", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"expr": "sum(rate(nginx_ingress_nginx_http_requests_total[$__rate_interval]))", "legendFormat": "requests/sec", "refId": "A"}],
+      "title": "HTTP Requests/sec",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "fieldConfig": {"defaults": {"decimals": 0, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 33},
+      "id": 11,
+      "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "list", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"expr": "sum(nginx_ingress_nginx_connections_active)", "legendFormat": "active", "refId": "A"}],
+      "title": "Active Connections",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "fieldConfig": {"defaults": {"unit": "ops"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 33},
+      "id": 12,
+      "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "list", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"expr": "sum(rate(nginx_ingress_nginx_connections_accepted[$__rate_interval]))", "legendFormat": "connections/sec", "refId": "A"}],
+      "title": "Accepted Connections/sec",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "fieldConfig": {"defaults": {"unit": "ms"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 41},
+      "id": 13,
+      "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "right", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"expr": "sum by (upstream) (rate(nginx_ingress_controller_upstream_server_response_latency_ms_sum[$__rate_interval])) / clamp_min(sum by (upstream) (rate(nginx_ingress_controller_upstream_server_response_latency_ms_count[$__rate_interval])), 1)", "legendFormat": "{{upstream}}", "refId": "A"}],
+      "title": "Upstream Average Latency",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "fieldConfig": {"defaults": {"unit": "ms"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 41},
+      "id": 14,
+      "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "right", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"expr": "histogram_quantile(0.50, sum by (le, upstream) (rate(nginx_ingress_controller_upstream_server_response_latency_ms_bucket[$__rate_interval])))", "legendFormat": "p50 {{upstream}}", "refId": "A"},
+        {"expr": "histogram_quantile(0.95, sum by (le, upstream) (rate(nginx_ingress_controller_upstream_server_response_latency_ms_bucket[$__rate_interval])))", "legendFormat": "p95 {{upstream}}", "refId": "B"},
+        {"expr": "histogram_quantile(0.99, sum by (le, upstream) (rate(nginx_ingress_controller_upstream_server_response_latency_ms_bucket[$__rate_interval])))", "legendFormat": "p99 {{upstream}}", "refId": "C"}
+      ],
+      "title": "Upstream Latency Percentiles",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 49},
+      "id": 15,
+      "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "right", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"expr": "sum by (status) (rate(nginx_ingress_nginx_http_requests_total[$__rate_interval]))", "legendFormat": "HTTP {{status}}", "refId": "A"}],
+      "title": "Request Rate by HTTP Status",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "fieldConfig": {"defaults": {"max": 100, "min": 0, "unit": "percent"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 12, "y": 49},
+      "id": 16,
+      "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "list", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"expr": "100 * (sum(rate(nginx_ingress_nginx_http_requests_total{status=~\"5..\"}[$__rate_interval])) or vector(0)) / clamp_min((sum(rate(nginx_ingress_nginx_http_requests_total[$__rate_interval])) or vector(0)), 1)", "legendFormat": "5xx %", "refId": "A"}],
+      "title": "5xx Upstream Error Rate %",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "fieldConfig": {"defaults": {"decimals": 0, "mappings": [{"options": {"0": {"color": "red", "text": "Failed"}, "1": {"color": "green", "text": "Successful"}}, "type": "value"}], "max": 1, "min": 0, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 4, "x": 20, "y": 49},
+      "id": 17,
+      "options": {"colorMode": "background", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true},
+      "targets": [{"expr": "min(nginx_ingress_controller_nginx_last_reload_status)", "legendFormat": "reload", "refId": "A"}],
+      "title": "NGINX Last Reload",
+      "type": "stat"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 41,
+  "tags": ["kubernetes", "prometheus", "nginx", "portfolio"],
+  "templating": {"list": [{"current": {}, "hide": 0, "includeAll": false, "label": "Prometheus", "multi": false, "name": "DS_PROMETHEUS", "options": [], "query": "prometheus", "refresh": 1, "regex": "", "skipUrlSync": false, "type": "datasource"}]},
+  "time": {"from": "now-6h", "to": "now"},
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Kubernetes Cluster Monitoring",
+  "uid": "kubernetes-cluster-monitoring",
+  "version": 1,
+  "weekStart": ""
+}
