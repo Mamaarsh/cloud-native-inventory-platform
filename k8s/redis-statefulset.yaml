@@ -19,6 +19,7 @@ spec:
         app.kubernetes.io/component: broker
         app.kubernetes.io/part-of: cloud-native-inventory-platform
     spec:
+      serviceAccountName: redis-sa
       automountServiceAccountToken: false
       securityContext:
         seccompProfile:

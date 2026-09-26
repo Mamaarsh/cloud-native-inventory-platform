@@ -32,6 +32,13 @@ spec:
                 name: backend
                 port:
                   number: 8000
+          - path: /media
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 80
           - path: /
             pathType: Prefix
             backend:

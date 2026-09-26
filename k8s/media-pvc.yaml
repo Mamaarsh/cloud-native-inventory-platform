@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: media
+  namespace: inventory
+  labels:
+    app.kubernetes.io/part-of: cloud-native-inventory-platform
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: longhorn-media
+  resources:
+    requests:
+      storage: 2Gi

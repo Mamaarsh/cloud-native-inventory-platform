@@ -97,6 +97,7 @@ spec:
         - name: staticfiles
           emptyDir: {}
         - name: media
-          emptyDir: {}
+          persistentVolumeClaim:
+            claimName: media
         - name: tmp
           emptyDir: {}

@@ -30,7 +30,7 @@ spec:
       securityContext:
         seccompProfile:
           type: RuntimeDefault
-        fsGroup: 101
+        fsGroup: 999
         fsGroupChangePolicy: OnRootMismatch
       imagePullSecrets:
         - name: nexus-registry-secret
@@ -53,6 +53,9 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            - name: media
+              mountPath: /var/www/media
+              readOnly: true
           resources:
             requests:
               cpu: "50m"
@@ -79,3 +82,6 @@ spec:
       volumes:
         - name: tmp
           emptyDir: {}
+        - name: media
+          persistentVolumeClaim:
+            claimName: media
