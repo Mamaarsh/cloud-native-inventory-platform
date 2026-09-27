@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000" role="img" aria-labelledby="title desc">
+  <title id="title">Cloud Native Inventory Platform architecture</title>
+  <desc id="desc">GitHub to GitLab CI, Nexus, Kubernetes runtime, Longhorn media, and Prometheus Grafana observability.</desc>
+  <defs>
+    <style>
+      .title{font:700 34px Arial,sans-serif;fill:#0f172a}.subtitle{font:16px Arial,sans-serif;fill:#475569}
+      .section{font:700 20px Arial,sans-serif}.node{fill:#fff;stroke:#94a3b8;stroke-width:2}.label{font:700 16px Arial,sans-serif;fill:#0f172a}.small{font:13px Arial,sans-serif;fill:#475569}
+      .edge{fill:none;stroke:#64748b;stroke-width:2.5;marker-end:url(#arrow)}.dash{stroke-dasharray:8 7}.edgeLabel{font:12px Arial,sans-serif;fill:#475569}
+    </style>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0l10 5-10 5z" fill="#64748b"/></marker>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#0f172a" flood-opacity=".12"/></filter>
+  </defs>
+  <rect width="1600" height="1000" fill="#f8fafc"/>
+  <text x="800" y="54" text-anchor="middle" class="title">Cloud Native Inventory Platform</text>
+  <text x="800" y="82" text-anchor="middle" class="subtitle">Production-oriented delivery, runtime, storage, and observability architecture</text>
+
+  <rect x="50" y="110" width="1500" height="215" rx="22" fill="#eef2ff" stroke="#6366f1" stroke-width="2"/>
+  <text x="78" y="145" class="section" fill="#3730a3">Delivery pipeline</text>
+  <g filter="url(#shadow)">
+    <rect class="node" x="85" y="180" width="145" height="82" rx="14"/><text x="158" y="212" text-anchor="middle" class="label">Developer</text><text x="158" y="237" text-anchor="middle" class="small">source changes</text>
+    <rect class="node" x="270" y="180" width="145" height="82" rx="14"/><text x="343" y="212" text-anchor="middle" class="label">GitHub</text><text x="343" y="237" text-anchor="middle" class="small">main</text>
+    <rect class="node" x="455" y="180" width="170" height="82" rx="14"/><text x="540" y="208" text-anchor="middle" class="label">GitHub Actions</text><text x="540" y="233" text-anchor="middle" class="small">sync + trigger</text>
+    <rect class="node" x="665" y="180" width="145" height="82" rx="14"/><text x="738" y="208" text-anchor="middle" class="label">Test</text><text x="738" y="233" text-anchor="middle" class="small">246 + lint/build</text>
+    <rect class="node" x="850" y="180" width="145" height="82" rx="14"/><text x="923" y="208" text-anchor="middle" class="label">Build</text><text x="923" y="233" text-anchor="middle" class="small">Nexus bases</text>
+    <rect x="1035" y="180" width="165" height="82" rx="14" fill="#fee2e2" stroke="#ef4444" stroke-width="2"/><text x="1118" y="208" text-anchor="middle" class="label">Trivy gate</text><text x="1118" y="233" text-anchor="middle" class="small">HIGH / CRITICAL</text>
+    <rect class="node" x="1240" y="180" width="170" height="82" rx="14"/><text x="1325" y="208" text-anchor="middle" class="label">Deploy</text><text x="1325" y="233" text-anchor="middle" class="small">migration + SHA</text>
+  </g>
+  <path class="edge" d="M230 221H270M415 221H455M625 221H665M810 221H850M995 221H1035M1200 221H1240"/>
+  <rect x="820" y="278" width="205" height="32" rx="16" fill="#fef3c7" stroke="#d97706"/><text x="923" y="299" text-anchor="middle" class="small">Nexus proxy · :8083</text>
+  <rect x="1220" y="278" width="210" height="32" rx="16" fill="#fef3c7" stroke="#d97706"/><text x="1325" y="299" text-anchor="middle" class="small">Hosted images · :8084</text>
+
+  <rect x="50" y="355" width="1000" height="585" rx="22" fill="#eff6ff" stroke="#2563eb" stroke-width="2"/>
+  <text x="78" y="392" class="section" fill="#1d4ed8">kubeadm Kubernetes cluster</text>
+  <rect x="405" y="420" width="285" height="62" rx="14" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/><text x="548" y="457" text-anchor="middle" class="label">NGINX Ingress</text>
+  <rect class="node" x="175" y="535" width="285" height="85" rx="14"/><text x="318" y="568" text-anchor="middle" class="label">Frontend ×2</text><text x="318" y="594" text-anchor="middle" class="small">React + unprivileged NGINX</text>
+  <rect class="node" x="635" y="535" width="285" height="85" rx="14"/><text x="778" y="568" text-anchor="middle" class="label">Backend ×2</text><text x="778" y="594" text-anchor="middle" class="small">Django + Gunicorn</text>
+  <path class="edge" d="M495 482L365 535"/><text x="392" y="500" class="edgeLabel">/ and /media</text>
+  <path class="edge" d="M600 482L730 535"/><text x="690" y="500" class="edgeLabel">/api</text>
+  <rect class="node" x="635" y="665" width="175" height="62" rx="14"/><text x="723" y="702" text-anchor="middle" class="label">Celery worker</text>
+  <rect class="node" x="850" y="665" width="155" height="62" rx="14"/><text x="928" y="702" text-anchor="middle" class="label">Redis</text>
+  <rect class="node" x="850" y="765" width="155" height="62" rx="14"/><text x="928" y="802" text-anchor="middle" class="label">PostgreSQL</text>
+  <path class="edge" d="M778 620L895 665M778 620L895 765M810 696H850M810 710L875 765"/>
+  <rect x="135" y="700" width="390" height="92" rx="16" fill="#f0fdf4" stroke="#16a34a" stroke-width="2"/><text x="330" y="736" text-anchor="middle" class="label">Longhorn RWX media PVC</text><text x="330" y="763" text-anchor="middle" class="small">2 GiB · two replicas · share-manager</text>
+  <path class="edge" d="M700 620L500 700"/><text x="570" y="653" class="edgeLabel">/app/media RW</text>
+  <path class="edge" d="M290 700L312 620"/><text x="175" y="660" class="edgeLabel">/var/www/media RO</text>
+  <rect class="node" x="135" y="835" width="175" height="60" rx="14"/><text x="223" y="871" text-anchor="middle" class="label">worker-1 replica</text>
+  <rect class="node" x="350" y="835" width="175" height="60" rx="14"/><text x="438" y="871" text-anchor="middle" class="label">worker-2 replica</text>
+  <path class="edge" d="M280 792L235 835M380 792L425 835"/>
+
+  <rect x="1080" y="355" width="470" height="585" rx="22" fill="#fdf2f8" stroke="#db2777" stroke-width="2"/>
+  <text x="1108" y="392" class="section" fill="#9d174d">Observability</text>
+  <rect class="node" x="1150" y="445" width="330" height="72" rx="14"/><text x="1315" y="475" text-anchor="middle" class="label">node-exporter</text><text x="1315" y="499" text-anchor="middle" class="small">kube-state-metrics</text>
+  <rect class="node" x="1150" y="565" width="330" height="72" rx="14"/><text x="1315" y="595" text-anchor="middle" class="label">NGINX metrics</text><text x="1315" y="619" text-anchor="middle" class="small">ClusterIP + ServiceMonitor</text>
+  <rect x="1150" y="690" width="330" height="72" rx="14" fill="#ffedd5" stroke="#ea580c" stroke-width="2"/><text x="1315" y="733" text-anchor="middle" class="label">Prometheus</text>
+  <rect x="1150" y="815" width="330" height="72" rx="14" fill="#ffedd5" stroke="#ea580c" stroke-width="2"/><text x="1315" y="844" text-anchor="middle" class="label">Grafana</text><text x="1315" y="868" text-anchor="middle" class="small">Kubernetes Cluster Monitoring</text>
+  <path class="edge" d="M1315 517V690M1315 637V690M1315 762V815"/>
+  <path class="edge dash" d="M690 451H1080L1150 590"/><text x="890" y="440" class="edgeLabel">cluster and ingress metrics</text>
+</svg>

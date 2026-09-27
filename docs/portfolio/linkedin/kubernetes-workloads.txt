@@ -1,0 +1,38 @@
+=== Kubernetes nodes ===
+NAME            STATUS   ROLES           AGE   VERSION
+control-plane   Ready    control-plane   53d   v1.35.7
+worker-1        Ready    <none>          53d   v1.35.7
+worker-2        Ready    <none>          53d   v1.35.7
+
+=== Inventory workloads ===
+NAME                            READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.apps/backend         2/2     2            2           16d
+deployment.apps/celery-worker   1/1     1            1           13d
+deployment.apps/frontend        2/2     2            2           16d
+
+NAME                        READY   AGE
+statefulset.apps/postgres   1/1     16d
+statefulset.apps/redis      1/1     13d
+
+=== Inventory pods ===
+NAME                             READY   STATUS    RESTARTS      AGE   IP               NODE       NOMINATED NODE   READINESS GATES
+backend-6497847f6b-jjs7f         1/1     Running   1 (89m ago)   30h   10.244.133.218   worker-2   <none>           <none>
+backend-6497847f6b-txzc5         1/1     Running   1 (89m ago)   30h   10.244.226.99    worker-1   <none>           <none>
+celery-worker-747fc74b9b-hxs68   1/1     Running   1 (89m ago)   30h   10.244.226.83    worker-1   <none>           <none>
+frontend-7dcdf4f778-n4zzr        1/1     Running   1 (89m ago)   30h   10.244.133.217   worker-2   <none>           <none>
+frontend-7dcdf4f778-qsn44        1/1     Running   1 (89m ago)   30h   10.244.226.98    worker-1   <none>           <none>
+postgres-0                       1/1     Running   0             87m   10.244.133.252   worker-2   <none>           <none>
+redis-0                          1/1     Running   0             87m   10.244.226.111   worker-1   <none>           <none>
+
+=== Product media PVC ===
+NAME    STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS     VOLUMEATTRIBUTESCLASS   AGE
+media   Bound    pvc-b0c341dd-063b-4d12-b5a3-f04f752ca145   2Gi        RWX            longhorn-media   <unset>                 32h
+
+=== Longhorn media volume ===
+VOLUME                                     STATE      HEALTH    REPLICAS   SHARE
+pvc-b0c341dd-063b-4d12-b5a3-f04f752ca145   attached   healthy   2          running
+
+=== Longhorn media replicas ===
+REPLICA                                               NODE       STATE
+pvc-b0c341dd-063b-4d12-b5a3-f04f752ca145-r-5fb60691   worker-1   running
+pvc-b0c341dd-063b-4d12-b5a3-f04f752ca145-r-dec4e298   worker-2   running

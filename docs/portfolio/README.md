@@ -1,5 +1,19 @@
 # Portfolio and LinkedIn Material
 
+The finalized presentation kit is in [`linkedin/`](linkedin/):
+
+- [Architecture diagram and Mermaid source](linkedin/architecture.md)
+- [Exact screenshot capture plan](linkedin/SCREENSHOTS.md)
+- [Persian LinkedIn case study](linkedin/linkedin-post-fa.md)
+- [English LinkedIn case study](linkedin/linkedin-post-en.md)
+- [Short LinkedIn version](linkedin/linkedin-post-short.md)
+- [LinkedIn, CV, GitHub, and elevator-pitch descriptions](linkedin/project-description.md)
+- [Technical interview highlights](linkedin/technical-highlights.md)
+- [Challenges solved](linkedin/challenges-solved.md)
+- [Seven-slide carousel outline](linkedin/carousel-outline.md)
+
+The material below is retained as an earlier compact reference.
+
 ## LinkedIn post
 
 I built **Cloud Native Inventory Platform**, an end-to-end DevOps portfolio project that uses a real Django and React inventory application to demonstrate the full path from source code to an observable Kubernetes workload.

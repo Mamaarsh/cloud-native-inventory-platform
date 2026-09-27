@@ -15,11 +15,11 @@
 
 This repository uses a Django REST API, React frontend, PostgreSQL, Redis, and Celery to demonstrate the complete delivery path from source control to hardened Kubernetes workloads and Prometheus/Grafana observability. It is a lab implementation of production-style practices: reproducible containers, CI quality gates, immutable image tags, least-privilege deployment, persistent services, network isolation, metrics discovery, and dashboards as code.
 
-<!-- TODO(PORTFOLIO): Add docs/images/application-dashboard.png -->
-<!-- TODO(PORTFOLIO): Add docs/images/gitlab-pipeline.png -->
-<!-- TODO(PORTFOLIO): Add docs/images/kubernetes-workloads.png -->
-<!-- TODO(PORTFOLIO): Add docs/images/grafana-cluster-monitoring.png -->
-<!-- TODO(PORTFOLIO): Add docs/images/nexus-repository.png -->
+## Project at a Glance
+
+[![Cloud Native Inventory Platform architecture](docs/portfolio/linkedin/architecture.png)](docs/portfolio/linkedin/architecture.md)
+
+The diagram separates the Nexus proxy used for CI/base images (`192.168.122.1:8083`) from the hosted application-image registry (`nexus.local:8084`). See the [portfolio architecture source](docs/portfolio/linkedin/architecture.md) and the exact [screenshot capture plan](docs/portfolio/linkedin/SCREENSHOTS.md). Authenticated UI screenshots will be added only after they are captured from the real application and platform interfaces.
 
 ## What This Project Demonstrates
 
@@ -213,6 +213,7 @@ docker-compose.yml          Portable local application stack
 - [Roadmap](docs/roadmap.md)
 - [API reference](docs/api.md)
 - [Portfolio and LinkedIn copy](docs/portfolio/README.md)
+- [Final LinkedIn presentation kit](docs/portfolio/linkedin/)
 
 ## Known Limitations / Roadmap
 
