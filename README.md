@@ -19,7 +19,39 @@ This repository uses a Django REST API, React frontend, PostgreSQL, Redis, and C
 
 [![Cloud Native Inventory Platform architecture](docs/portfolio/linkedin/architecture.png)](docs/portfolio/linkedin/architecture.md)
 
-The diagram separates the Nexus proxy used for CI/base images (`192.168.122.1:8083`) from the hosted application-image registry (`nexus.local:8084`). See the [portfolio architecture source](docs/portfolio/linkedin/architecture.md) and the exact [screenshot capture plan](docs/portfolio/linkedin/SCREENSHOTS.md). Authenticated UI screenshots will be added only after they are captured from the real application and platform interfaces.
+The diagram separates the Nexus proxy used for CI/base images (`192.168.122.1:8083`) from the hosted application-image registry (`nexus.local:8084`). See the [portfolio architecture source](docs/portfolio/linkedin/architecture.md) and [screenshot methodology](docs/portfolio/linkedin/SCREENSHOTS.md).
+
+## Live Project Evidence
+
+### Application
+
+The Stockline Product Registry is running through the Kubernetes application path and displays a persisted uploaded product thumbnail.
+
+![Stockline inventory application dashboard](docs/images/linkedin/application-dashboard.png)
+
+### CI/CD
+
+Commit `c7fcdcc1` passed application tests, image builds, blocking Trivy security scans, and the Kubernetes deployment stage.
+
+![Successful GitLab CI/CD pipeline](docs/images/linkedin/gitlab-pipeline.png)
+
+### Kubernetes
+
+The control-plane and two workers are Ready; backend, frontend, Celery, PostgreSQL, and Redis workloads are Running.
+
+![Kubernetes cluster and inventory workloads](docs/images/linkedin/kubernetes-workloads.png)
+
+### Observability
+
+Prometheus and Grafana expose populated Kubernetes compute metrics, including the `inventory` namespace.
+
+![Kubernetes monitoring with Grafana and Prometheus](docs/images/linkedin/grafana-cluster-monitoring.png)
+
+### Internal Registry
+
+Backend and frontend images for commit `c7fcdcc1` are stored in the Nexus `docker-hosted` repository; CI dependency access remains a separate proxy role.
+
+![Backend and frontend application images in Nexus Repository](docs/images/linkedin/nexus-repository.png)
 
 ## What This Project Demonstrates
 

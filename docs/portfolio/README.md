@@ -12,6 +12,8 @@ The finalized presentation kit is in [`linkedin/`](linkedin/):
 - [Challenges solved](linkedin/challenges-solved.md)
 - [Seven-slide carousel outline](linkedin/carousel-outline.md)
 
+The primary evidence gallery is complete in [`../images/linkedin/`](../images/linkedin/): application, CI/CD, Kubernetes, Grafana, and combined backend/frontend Nexus captures. Optional Trivy-detail and Longhorn-detail images remain documented in the screenshot methodology.
+
 The material below is retained as an earlier compact reference.
 
 ## LinkedIn post
